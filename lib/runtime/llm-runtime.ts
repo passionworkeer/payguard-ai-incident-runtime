@@ -10,7 +10,8 @@ export class LlmIncidentRuntime implements IncidentRuntime {
 
   constructor(
     private readonly baseUrl = '/api/runtime',
-    private readonly fetcher: Fetcher = fetch,
+    // 箭头包装避免把本实例当作 fetch 的 receiver（浏览器会抛 Illegal invocation）。
+    private readonly fetcher: Fetcher = (input, init) => fetch(input, init),
   ) {}
 
   setVerifyImage(image: StageImage) {

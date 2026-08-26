@@ -57,7 +57,9 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
     const priorOutputs = Object.fromEntries(
       run.completedStages.map((completed) => [completed, run.executions[completed]?.output]),
     );
-    const result = await this.caller({
+    // 模型对 Schema 的「条数/长度」类约束遵循不稳定：解析方差（NO_TOOL / INVALID_OUTPUT）
+    // 属偶发，先原样重试一次真实调用；持续失败仍按错误上抛，不用 Mock 结果替代。
+    const request = {
       config: readLlmConfig(),
       stage,
       context: {
@@ -67,7 +69,11 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
         approval: stageOrder.indexOf(stage) > stageOrder.indexOf('contact') ? 'approved' : undefined,
       },
       image,
-    });
+    } as const;
+    let result = await this.caller(request);
+    if (!result.ok && (result.code === 'LLM_NO_TOOL' || result.code === 'LLM_INVALID_OUTPUT')) {
+      result = await this.caller(request);
+    }
     if (!result.ok) throw new LlmRuntimeError(result.code, result.message, result.retryable);
 
     const now = new Date().toISOString();

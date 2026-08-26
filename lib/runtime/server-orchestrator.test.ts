@@ -76,5 +76,31 @@ describe('ServerIncidentOrchestrator', () => {
     expect(error).toBeInstanceOf(LlmRuntimeError);
     expect(error).toMatchObject({ code: 'LLM_TIMEOUT', retryable: true });
     expect(await orchestrator.getRun(run.id)).toMatchObject({ currentStage: 'verify', completedStages: [] });
+    expect(caller).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries once on parse-variance failures before succeeding', async () => {
+    const caller = vi.fn()
+      .mockResolvedValueOnce({ ok: false, code: 'LLM_INVALID_OUTPUT', message: '模型结果未通过阶段 Schema 校验。', retryable: true })
+      .mockResolvedValueOnce(llmResult('verify'));
+    const orchestrator = new ServerIncidentOrchestrator(caller);
+    const run = await orchestrator.createIncident('gateway-timeout');
+
+    const result = await orchestrator.executeStage(run.id, 'verify', image);
+
+    expect(caller).toHaveBeenCalledTimes(2);
+    expect(result.run.currentStage).toBe('locate');
+  });
+
+  it('surfaces the parse error when a single retry still fails', async () => {
+    const caller = vi.fn().mockResolvedValue({ ok: false, code: 'LLM_NO_TOOL', message: '模型未返回预期结构化工具结果。', retryable: true });
+    const orchestrator = new ServerIncidentOrchestrator(caller);
+    const run = await orchestrator.createIncident('gateway-timeout');
+
+    const error = await orchestrator.executeStage(run.id, 'verify', image).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(LlmRuntimeError);
+    expect(error).toMatchObject({ code: 'LLM_NO_TOOL' });
+    expect(caller).toHaveBeenCalledTimes(2);
   });
 });

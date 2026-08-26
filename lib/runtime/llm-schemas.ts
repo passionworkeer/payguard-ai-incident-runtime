@@ -92,39 +92,84 @@ export const stageToolDefinitions = stageOrder.reduce((definitions, stage) => {
   return definitions;
 }, {} as Record<IncidentStage, StageToolDefinition>);
 
+const maxStringLength = 1200;
+const maxArrayItems = 8;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= 1200;
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isStrings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length <= 8 && value.every(isString);
+// 模型对「条数/长度」约束遵循不稳定（如实测会给出 10 条决策因素），
+// 数量类偏差做确定性收敛而不是整单拒绝；类型级违规仍严格拒绝。
+function clampString(value: string): string {
+  return value.length > maxStringLength ? value.slice(0, maxStringLength) : value;
+}
+
+function asStrings(value: unknown): string[] | null {
+  if (!Array.isArray(value) || !value.every(isNonEmptyString)) return null;
+  return value.slice(0, maxArrayItems).map(clampString);
+}
+
+function asString(value: unknown): string | null {
+  return isNonEmptyString(value) ? clampString(value) : null;
 }
 
 function pickOutput(stage: IncidentStage, value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
   switch (stage) {
-    case 'verify':
-      if (typeof value.isIncident !== 'boolean' || !['P0', 'P1', 'P2'].includes(String(value.severity)) || typeof value.confidence !== 'number' || value.confidence < 0 || value.confidence > 100 || !isString(value.impactScope) || !isStrings(value.visualFindings)) return null;
-      return { isIncident: value.isIncident, severity: value.severity, confidence: value.confidence, impactScope: value.impactScope, visualFindings: value.visualFindings };
-    case 'locate':
-      if (!isString(value.topCause) || !isStrings(value.alternatives) || !isStrings(value.evidenceRefs) || !isStrings(value.recommendedActions)) return null;
-      return { topCause: value.topCause, alternatives: value.alternatives, evidenceRefs: value.evidenceRefs, recommendedActions: value.recommendedActions };
-    case 'contact':
-      if (!isString(value.subject) || !isString(value.message) || !isString(value.actionLinkLabel) || !isStrings(value.channels)) return null;
-      return { subject: value.subject, message: value.message, actionLinkLabel: value.actionLinkLabel, channels: value.channels };
-    case 'escalate':
-      if (!isString(value.ticketTitle) || !isStrings(value.teams) || !isString(value.sla) || !isString(value.escalationReason) || value.simulatedAction !== true) return null;
-      return { ticketTitle: value.ticketTitle, teams: value.teams, sla: value.sla, escalationReason: value.escalationReason, simulatedAction: true };
-    case 'recover':
-      if (typeof value.recovered !== 'boolean' || typeof value.stableWindows !== 'number' || !isString(value.residualRisk) || !isString(value.observationAdvice)) return null;
-      return { recovered: value.recovered, stableWindows: value.stableWindows, residualRisk: value.residualRisk, observationAdvice: value.observationAdvice };
-    case 'evaluate':
-      if (!isString(value.sampleId) || !isString(value.verifyLabel) || !isString(value.predictedRootCause) || !isString(value.finalRootCause) || typeof value.humanCorrected !== 'boolean' || !isString(value.dataset) || !isStrings(value.qualityChecks)) return null;
-      return { sampleId: value.sampleId, verifyLabel: value.verifyLabel, predictedRootCause: value.predictedRootCause, finalRootCause: value.finalRootCause, humanCorrected: value.humanCorrected, dataset: value.dataset, qualityChecks: value.qualityChecks };
+    case 'verify': {
+      if (typeof value.isIncident !== 'boolean' || !['P0', 'P1', 'P2'].includes(String(value.severity)) || typeof value.confidence !== 'number' || value.confidence < 0 || value.confidence > 100) return null;
+      const impactScope = asString(value.impactScope);
+      const visualFindings = asStrings(value.visualFindings);
+      if (!impactScope || !visualFindings) return null;
+      return { isIncident: value.isIncident, severity: value.severity, confidence: value.confidence, impactScope, visualFindings };
+    }
+    case 'locate': {
+      const topCause = asString(value.topCause);
+      const alternatives = asStrings(value.alternatives);
+      const evidenceRefs = asStrings(value.evidenceRefs);
+      const recommendedActions = asStrings(value.recommendedActions);
+      if (!topCause || !alternatives || !evidenceRefs || !recommendedActions) return null;
+      return { topCause, alternatives, evidenceRefs, recommendedActions };
+    }
+    case 'contact': {
+      const subject = asString(value.subject);
+      const message = asString(value.message);
+      const actionLinkLabel = asString(value.actionLinkLabel);
+      const channels = asStrings(value.channels);
+      if (!subject || !message || !actionLinkLabel || !channels) return null;
+      return { subject, message, actionLinkLabel, channels };
+    }
+    case 'escalate': {
+      const ticketTitle = asString(value.ticketTitle);
+      const teams = asStrings(value.teams);
+      const sla = asString(value.sla);
+      const escalationReason = asString(value.escalationReason);
+      if (!ticketTitle || !teams || !sla || !escalationReason || value.simulatedAction !== true) return null;
+      return { ticketTitle, teams, sla, escalationReason, simulatedAction: true };
+    }
+    case 'recover': {
+      if (typeof value.recovered !== 'boolean' || typeof value.stableWindows !== 'number') return null;
+      const residualRisk = asString(value.residualRisk);
+      const observationAdvice = asString(value.observationAdvice);
+      if (!residualRisk || !observationAdvice) return null;
+      return { recovered: value.recovered, stableWindows: value.stableWindows, residualRisk, observationAdvice };
+    }
+    case 'evaluate': {
+      if (typeof value.humanCorrected !== 'boolean') return null;
+      const sampleId = asString(value.sampleId);
+      const verifyLabel = asString(value.verifyLabel);
+      const predictedRootCause = asString(value.predictedRootCause);
+      const finalRootCause = asString(value.finalRootCause);
+      const dataset = asString(value.dataset);
+      const qualityChecks = asStrings(value.qualityChecks);
+      if (!sampleId || !verifyLabel || !predictedRootCause || !finalRootCause || !dataset || !qualityChecks) return null;
+      return { sampleId, verifyLabel, predictedRootCause, finalRootCause, humanCorrected: value.humanCorrected, dataset, qualityChecks };
+    }
   }
 }
 
@@ -136,12 +181,16 @@ export interface ValidatedStageResult {
 }
 
 export function validateStageToolInput(stage: IncidentStage, input: unknown): ValidatedStageResult | null {
-  if (!isRecord(input) || !isString(input.summary) || typeof input.confidence !== 'number' || input.confidence < 0 || input.confidence > 100 || !Array.isArray(input.decisionFactors) || input.decisionFactors.length < 1 || input.decisionFactors.length > 8) return null;
+  if (!isRecord(input) || !isNonEmptyString(input.summary) || typeof input.confidence !== 'number' || input.confidence < 0 || input.confidence > 100 || !Array.isArray(input.decisionFactors) || input.decisionFactors.length < 1) return null;
   const factors: DecisionFactor[] = [];
-  for (const factor of input.decisionFactors) {
-    if (!isRecord(factor) || !isString(factor.label) || !isString(factor.value) || !isString(factor.evidence)) return null;
-    factors.push({ label: factor.label, value: factor.value, evidence: factor.evidence });
+  for (const factor of input.decisionFactors.slice(0, maxArrayItems)) {
+    const label = asString((factor as Record<string, unknown>)?.label);
+    const value = asString((factor as Record<string, unknown>)?.value);
+    const evidence = asString((factor as Record<string, unknown>)?.evidence);
+    if (!label || !value || !evidence) return null;
+    factors.push({ label, value, evidence });
   }
+  const summary = clampString(input.summary);
   const output = pickOutput(stage, input.output);
-  return output ? { output, decisionFactors: factors, confidence: input.confidence, summary: input.summary } : null;
+  return output ? { output, decisionFactors: factors, confidence: input.confidence, summary } : null;
 }

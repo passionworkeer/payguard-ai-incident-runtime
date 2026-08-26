@@ -54,6 +54,22 @@ describe('multimodal LLM client', () => {
     expect(init.headers['x-api-key']).toBe(config.apiKey);
   });
 
+  it('reserves enough output tokens to avoid truncating the tool JSON', async () => {
+    const fetcher = vi.fn().mockResolvedValue(responseWithTool(verifyToolInput));
+
+    await callStageLlm({
+      config,
+      stage: 'verify',
+      context: { merchant: '星海出行', alert: '支付接口超时率突增' },
+      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
+      fetchImpl: fetcher,
+    });
+
+    const [, init] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+    expect(body.max_tokens).toBeGreaterThanOrEqual(4096);
+  });
+
   it('returns validated output and token usage', async () => {
     const result = await callStageLlm({
       config,

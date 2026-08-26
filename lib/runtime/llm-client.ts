@@ -96,7 +96,9 @@ export async function callStageLlm(request: CallStageRequest): Promise<StageLlmR
       },
       body: JSON.stringify({
         model: request.config.model,
-        max_tokens: 1600,
+        // 预留充足输出空间：决策依据 + 结构化输出接近 1600 token 时会截断 tool JSON，
+        // 导致 Schema 校验随机失败。
+        max_tokens: 4096,
         system: buildStageSystemPrompt(request.stage),
         tools: [tool],
         tool_choice: { type: 'tool', name: tool.name },

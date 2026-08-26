@@ -22,7 +22,8 @@ export class RuntimeRequestError extends Error {
 export class HttpIncidentRuntime implements IncidentRuntime {
   constructor(
     private readonly baseUrl: string,
-    private readonly fetcher: Fetcher = fetch,
+    // 箭头包装避免把本实例当作 fetch 的 receiver（浏览器会抛 Illegal invocation）。
+    private readonly fetcher: Fetcher = (input, init) => fetch(input, init),
   ) {}
 
   createIncident(scenarioId: string) {
