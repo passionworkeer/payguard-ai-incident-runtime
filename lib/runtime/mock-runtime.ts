@@ -29,6 +29,7 @@ export class MockIncidentRuntime implements IncidentRuntime {
     const run: IncidentRun = {
       id: `RUN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       scenarioId,
+      mode: 'mock',
       incident: clone(scenario.incident),
       status: 'idle',
       currentStage: 'verify',

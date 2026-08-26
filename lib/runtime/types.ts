@@ -8,6 +8,7 @@ export const stageOrder = [
 ] as const;
 
 export type IncidentStage = (typeof stageOrder)[number];
+export type RuntimeMode = 'mock' | 'llm';
 export type RunStatus =
   | 'idle'
   | 'running'
@@ -60,6 +61,10 @@ export interface StageExecution {
   risk: string;
   fallback: string;
   requiresApproval?: boolean;
+  provider?: 'mock' | 'real_llm';
+  model?: string;
+  imageSource?: 'built_in' | 'uploaded';
+  costEstimated?: boolean;
 }
 
 export interface IncidentSummaryData {
@@ -73,6 +78,7 @@ export interface IncidentSummaryData {
 export interface IncidentRun {
   id: string;
   scenarioId: string;
+  mode: RuntimeMode;
   incident: IncidentSummaryData;
   status: RunStatus;
   currentStage: IncidentStage;

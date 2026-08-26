@@ -20,6 +20,7 @@ const verifyToolInput = {
   decisionFactors: [
     { label: '成功率', value: '71.36%', evidence: 'metrics://success-rate' },
   ],
+  confidence: 96,
   summary: '监控截图与结构化指标相互印证，确认为 P0 真实故障。',
 };
 
@@ -66,6 +67,7 @@ describe('multimodal LLM client', () => {
       ok: true,
       output: verifyToolInput.output,
       usage: { inputTokens: 321, outputTokens: 123 },
+      confidence: 96,
       imageSource: 'uploaded',
     });
   });

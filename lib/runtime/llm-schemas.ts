@@ -82,9 +82,10 @@ export const stageToolDefinitions = stageOrder.reduce((definitions, stage) => {
       properties: {
         output: outputSchemas[stage],
         decisionFactors: { type: 'array', items: decisionFactorSchema, minItems: 1, maxItems: 8 },
+        confidence: { type: 'number', minimum: 0, maximum: 100 },
         summary: string,
       },
-      required: ['output', 'decisionFactors', 'summary'],
+      required: ['output', 'decisionFactors', 'confidence', 'summary'],
       additionalProperties: false,
     },
   };
@@ -130,16 +131,17 @@ function pickOutput(stage: IncidentStage, value: unknown): Record<string, unknow
 export interface ValidatedStageResult {
   output: Record<string, unknown>;
   decisionFactors: DecisionFactor[];
+  confidence: number;
   summary: string;
 }
 
 export function validateStageToolInput(stage: IncidentStage, input: unknown): ValidatedStageResult | null {
-  if (!isRecord(input) || !isString(input.summary) || !Array.isArray(input.decisionFactors) || input.decisionFactors.length < 1 || input.decisionFactors.length > 8) return null;
+  if (!isRecord(input) || !isString(input.summary) || typeof input.confidence !== 'number' || input.confidence < 0 || input.confidence > 100 || !Array.isArray(input.decisionFactors) || input.decisionFactors.length < 1 || input.decisionFactors.length > 8) return null;
   const factors: DecisionFactor[] = [];
   for (const factor of input.decisionFactors) {
     if (!isRecord(factor) || !isString(factor.label) || !isString(factor.value) || !isString(factor.evidence)) return null;
     factors.push({ label: factor.label, value: factor.value, evidence: factor.evidence });
   }
   const output = pickOutput(stage, input.output);
-  return output ? { output, decisionFactors: factors, summary: input.summary } : null;
+  return output ? { output, decisionFactors: factors, confidence: input.confidence, summary: input.summary } : null;
 }

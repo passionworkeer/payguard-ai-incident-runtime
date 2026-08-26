@@ -1,0 +1,52 @@
+import { describe, expect, it, vi } from 'vitest';
+import { LlmIncidentRuntime } from './llm-runtime';
+import type { IncidentRun, StageExecution } from './types';
+
+const run = {
+  id: 'LLM-1',
+  scenarioId: 'gateway-timeout',
+  mode: 'llm',
+  incident: { merchant: '星海出行', severity: 'P0', impact: '¥286.4万', title: '支付接口超时率突增', detectedAt: '2026-08-26' },
+  status: 'idle',
+  currentStage: 'verify',
+  completedStages: [],
+  executions: {},
+} satisfies IncidentRun;
+
+const execution = { stage: 'verify', provider: 'real_llm' } as StageExecution;
+
+describe('LlmIncidentRuntime', () => {
+  it('sends the verify image only with the verify command', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(run), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ run, execution }), { status: 200 }));
+    const runtime = new LlmIncidentRuntime('/api/runtime', fetcher);
+    runtime.setVerifyImage({ mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'uploaded' });
+
+    await runtime.createIncident('gateway-timeout');
+    await runtime.executeStage('LLM-1', 'verify');
+
+    const [, init] = fetcher.mock.calls[1];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      action: 'execute',
+      runId: 'LLM-1',
+      stage: 'verify',
+      image: { mediaType: 'image/png', source: 'uploaded' },
+    });
+  });
+
+  it('loads the public configuration without exposing a key', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      configured: true,
+      provider: 'anthropic-compatible',
+      model: 'multimodal-model',
+      multimodal: true,
+    }), { status: 200 }));
+    const runtime = new LlmIncidentRuntime('/api/runtime', fetcher);
+
+    const config = await runtime.getPublicConfig();
+
+    expect(config).toMatchObject({ configured: true, model: 'multimodal-model', multimodal: true });
+    expect(JSON.stringify(config)).not.toContain('key');
+  });
+});

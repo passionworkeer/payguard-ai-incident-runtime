@@ -28,6 +28,7 @@ export type StageLlmResult = {
   ok: true;
   output: Record<string, unknown>;
   decisionFactors: Array<{ label: string; value: string; evidence: string }>;
+  confidence: number;
   summary: string;
   usage: { inputTokens: number; outputTokens: number };
   durationMs: number;

@@ -22,6 +22,7 @@ function isIncidentRun(value: unknown): value is IncidentRun {
   return (
     typeof value.id === 'string' &&
     value.scenarioId === 'gateway-timeout' &&
+    (value.mode === 'mock' || value.mode === undefined) &&
     statuses.includes(value.status as RunStatus) &&
     stageOrder.includes(value.currentStage as (typeof stageOrder)[number]) &&
     Array.isArray(value.completedStages) &&
