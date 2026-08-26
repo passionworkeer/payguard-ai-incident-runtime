@@ -14,6 +14,10 @@ function clone<T>(value: T): T {
 export class MockIncidentRuntime implements IncidentRuntime {
   private runs = new Map<string, IncidentRun>();
 
+  constructor(initialRuns: IncidentRun[] = []) {
+    initialRuns.forEach((run) => this.runs.set(run.id, clone(run)));
+  }
+
   async createIncident(scenarioId: string): Promise<IncidentRun> {
     const scenario = runtimeScenarios[scenarioId];
     if (!scenario) throw new Error('scenario_not_found');
