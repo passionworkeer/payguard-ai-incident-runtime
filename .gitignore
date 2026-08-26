@@ -37,3 +37,4 @@ tsconfig.tsbuildinfo
 /.wrangler/
 /outputs/
 /work/
+.gstack/
