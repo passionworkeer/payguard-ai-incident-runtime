@@ -3,6 +3,7 @@
 import { BellRing, BrainCircuit, ChevronRight, FlaskConical, Menu, Network, PlayCircle, Sparkles, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { createEvaluationSample, type EvaluationSample } from '../lib/runtime/evaluation';
+import { LlmIncidentRuntime } from '../lib/runtime/llm-runtime';
 import type { IncidentRun } from '../lib/runtime/types';
 import { EvaluationView, FlowAnalyticsView } from './AnalyticsViews';
 import GuidedIncidentDemo from './demo/GuidedIncidentDemo';
@@ -21,6 +22,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('demo');
   const [evaluationSample, setEvaluationSample] = useState<EvaluationSample | null>(null);
+  const [llmRuntime] = useState(() => new LlmIncidentRuntime());
 
   const handleRunChange = useCallback((run: IncidentRun) => {
     if (run.status === 'completed') setEvaluationSample(createEvaluationSample(run));
@@ -82,7 +84,7 @@ export default function Dashboard() {
 
         <div className={`content-wrap ${activeView === 'demo' ? 'demo-content-wrap' : ''}`}>
           {activeView === 'demo' ? (
-            <GuidedIncidentDemo onRunChange={handleRunChange} />
+            <GuidedIncidentDemo llmRuntime={llmRuntime} onRunChange={handleRunChange} />
           ) : activeView === 'incidents' ? (
             <IncidentsView onStartDemo={() => setActiveView('demo')} />
           ) : activeView === 'flow' ? (

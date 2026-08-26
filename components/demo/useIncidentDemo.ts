@@ -22,6 +22,7 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
     let active = true;
     async function initialize() {
       setBusy(true);
+      setError(null);
       try {
         const restored = persist && typeof window !== 'undefined'
           ? loadMockRun(window.localStorage)

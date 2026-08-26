@@ -44,7 +44,22 @@ export function StageWorkspace({
           <h2>{heading}</h2>
           <p>{execution?.goal ?? '点击主操作后，系统仅执行当前步骤，并保留完整可审计记录。'}</p>
         </div>
-        {execution && <strong className="confidence-chip">置信度 {execution.metrics.confidence}%</strong>}
+        {execution && (
+          <div className="workspace-heading-meta">
+            <div className="provider-chips">
+              {execution.provider === 'real_llm' ? (
+                <>
+                  <span className="provider-badge real">REAL LLM</span>
+                  {execution.model && <span>{execution.model}</span>}
+                  {execution.imageSource && <span>图片来源：{execution.imageSource === 'uploaded' ? '上传图片' : '内置截图'}</span>}
+                </>
+              ) : (
+                <span className="provider-badge mock">MOCK</span>
+              )}
+            </div>
+            <strong className="confidence-chip">置信度 {execution.metrics.confidence}%</strong>
+          </div>
+        )}
       </header>
 
       <section className="workspace-block">
