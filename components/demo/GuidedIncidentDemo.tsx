@@ -163,6 +163,10 @@ export default function GuidedIncidentDemo({
         {modeBar}
         <div className="demo-loading" aria-live="polite">
           {mode === 'llm' ? '正在创建真实 LLM Run…' : '正在装载演示场景…'}
+          {demo.error ? <p className="demo-loading-error">初始化失败：{demo.error}</p> : null}
+          {mode === 'llm' && demo.error ? (
+            <button type="button" className="secondary-button demo-loading-retry" onClick={() => switchMode('mock')} disabled={demo.busy}>切回 Mock 演示</button>
+          ) : null}
         </div>
       </div>
     );
@@ -170,6 +174,9 @@ export default function GuidedIncidentDemo({
   const execution = run.executions[demo.selectedStage];
   const awaitingApproval = run.status === 'awaiting_approval';
   const completed = run.status === 'completed';
+  const needsHuman = run.status === 'needs_human';
+  // 真实模式的智能核验必须有图：图片未就绪时禁用执行，避免必然失败的误导性 IMAGE_INVALID。
+  const verifyImagePending = mode === 'llm' && run.currentStage === 'verify' && !verifyImage;
 
   return (
     <div className="guided-demo" aria-busy={demo.busy}>
@@ -205,8 +212,16 @@ export default function GuidedIncidentDemo({
 
       <footer className="demo-action-bar">
         <div>
-          <span>{completed ? '演示完成' : awaitingApproval ? '人工审批点' : `待执行：${actionLabels[run.currentStage].replace(/^.*：/, '')}`}</span>
-          <small>{demo.error ? `执行异常：${demo.error}` : slowHint && demo.busy ? '真实 LLM 正在分析图片与证据，耗时不确定，请稍候…' : '一次点击只推进一个业务步骤，历史结果不会被覆盖。'}</small>
+          <span>{completed ? '演示完成' : needsHuman ? '已转人工处理' : awaitingApproval ? '人工审批点' : `待执行：${actionLabels[run.currentStage].replace(/^.*：/, '')}`}</span>
+          <small>
+            {demo.error
+              ? `执行异常：${demo.error}`
+              : needsHuman
+                ? (run.humanReason ?? '等待值班人员介入处置。')
+                : slowHint && demo.busy
+                  ? '真实 LLM 正在分析图片与证据，耗时不确定，请稍候…'
+                  : '一次点击只推进一个业务步骤，历史结果不会被覆盖。'}
+          </small>
         </div>
         <div className="demo-actions">
           {mode === 'llm' && demo.error && (
@@ -220,9 +235,17 @@ export default function GuidedIncidentDemo({
             </>
           ) : completed ? (
             <span className="complete-chip">✓ 全链路处置完成</span>
+          ) : needsHuman ? (
+            <span className="human-chip">⏸ 已转人工 · 流程暂停，可重置演示重新开始</span>
           ) : (
-            <button type="button" className="demo-primary-action" onClick={demo.execute} disabled={demo.busy}>
-              {demo.busy ? (mode === 'llm' ? '真实 LLM 正在执行…' : 'AI 正在执行…') : actionLabels[run.currentStage]}
+            <button
+              type="button"
+              className="demo-primary-action"
+              onClick={demo.execute}
+              disabled={demo.busy || verifyImagePending}
+              title={verifyImagePending ? '正在等待核验图片就绪' : undefined}
+            >
+              {verifyImagePending && !demo.busy ? '等待核验图片就绪…' : demo.busy ? (mode === 'llm' ? '真实 LLM 正在执行…' : 'AI 正在执行…') : actionLabels[run.currentStage]}
             </button>
           )}
         </div>

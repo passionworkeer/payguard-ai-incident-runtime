@@ -1,12 +1,12 @@
 'use client';
 
 import type { EChartsOption } from 'echarts';
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight, CircleDollarSign, Filter, MousePointerClick, Sparkles, Target, TimerReset } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, CheckCircle2, CircleDollarSign, Filter, MousePointerClick, Sparkles, Target, TimerReset } from 'lucide-react';
 import { useState } from 'react';
 import type { EvaluationSample } from '../lib/runtime/evaluation';
 import EChart from './EChart';
 
-const axis = { axisLine: { lineStyle: { color: '#24404d' } }, axisLabel: { color: '#668493', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(143,174,194,.07)' } } };
+const axis = { axisLine: { lineStyle: { color: '#24404d' } }, axisLabel: { color: '#8aa4b0', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(143,174,194,.07)' } } };
 const tooltip = { backgroundColor: '#10232e', borderColor: '#294653', textStyle: { color: '#dcebf0', fontSize: 10 } };
 
 const funnel = [
@@ -34,8 +34,8 @@ const sankeyOption: EChartsOption = {
 };
 
 const latencyOption: EChartsOption = {
-  color: ['#31c8df', '#9b8afb', '#f6b84d'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 8, textStyle: { color: '#708b99', fontSize: 9 } },
-  grid: { left: 38, right: 14, top: 32, bottom: 25 }, xAxis: { type: 'category', data: ['核验','定位','触达','升级','恢复'], ...axis }, yAxis: { type: 'value', name: '秒', nameTextStyle: { color: '#557280', fontSize: 8 }, ...axis },
+  color: ['#31c8df', '#9b8afb', '#f6b84d'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 8, textStyle: { color: '#8fa9b5', fontSize: 9 } },
+  grid: { left: 38, right: 14, top: 32, bottom: 25 }, xAxis: { type: 'category', data: ['核验','定位','触达','升级','恢复'], ...axis }, yAxis: { type: 'value', name: '秒', nameTextStyle: { color: '#7f99a6', fontSize: 8 }, ...axis },
   series: [
     { name: 'P50', type: 'bar', barMaxWidth: 14, data: [1.24,4.38,.98,.46,1.86], itemStyle: { borderRadius: [3,3,0,0] } },
     { name: 'P95', type: 'bar', barMaxWidth: 14, data: [2.86,8.92,2.14,1.12,4.26], itemStyle: { borderRadius: [3,3,0,0] } },
@@ -44,10 +44,10 @@ const latencyOption: EChartsOption = {
 };
 
 const toolOption: EChartsOption = {
-  color: ['#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { right: 8, top: 0, textStyle: { color: '#708b99', fontSize: 9 } }, grid: { left: 88, right: 34, top: 30, bottom: 18 },
+  color: ['#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { right: 8, top: 0, textStyle: { color: '#8fa9b5', fontSize: 9 } }, grid: { left: 88, right: 34, top: 30, bottom: 18 },
   xAxis: [
     { type: 'value', ...axis },
-    { type: 'value', min: 90, max: 100, position: 'top', axisLabel: { formatter: '{value}%', color: '#668493', fontSize: 8 }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#24404d' } } },
+    { type: 'value', min: 90, max: 100, position: 'top', axisLabel: { formatter: '{value}%', color: '#8aa4b0', fontSize: 8 }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#24404d' } } },
   ], yAxis: { type: 'category', data: ['Message','Ticket','Merchant Profile','Case RAG','Logs','Metrics'], ...axis },
   series: [{ name: '调用量', type: 'bar', data: [1522,672,2194,1876,3510,5892], barMaxWidth: 10, itemStyle: { borderRadius: [0,4,4,0] } }, { name: '成功率', type: 'line', xAxisIndex: 1, data: [98,99,99,94,97,99], symbolSize: 5 }],
 };
@@ -58,7 +58,8 @@ const channelOption: EChartsOption = {
 };
 
 function ViewHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
-  return <div className="view-header"><div><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></div><div className="view-actions"><button><Filter size={14}/>全部商户</button><button>近 7 日<ChevronRight size={13}/></button></div></div>;
+  // 静态徽标而非按钮：这些筛选在演示数据集上是固定口径，不做假的交互反馈。
+  return <div className="view-header"><div><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></div><div className="view-actions"><span className="view-chip"><Filter size={14}/>全部商户</span><span className="view-chip">近 7 日</span></div></div>;
 }
 
 function MiniMetric({ icon: Icon, label, value, helper, tone = 'cyan' }: { icon: typeof Target; label: string; value: string; helper: string; tone?: string }) {
@@ -86,7 +87,7 @@ export function FlowAnalyticsView() {
 }
 
 const experimentOption: EChartsOption = {
-  color: ['#546d7a','#4f8cff','#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 6, textStyle: { color: '#708b99', fontSize: 9 } }, grid: { left: 44, right: 12, top: 36, bottom: 24 },
+  color: ['#546d7a','#4f8cff','#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 6, textStyle: { color: '#8fa9b5', fontSize: 9 } }, grid: { left: 44, right: 12, top: 36, bottom: 24 },
   xAxis: { type: 'category', data: ['核验 Recall','根因 Top-1','Evidence','自动处置'], ...axis }, yAxis: { type: 'value', min: 50, max: 100, axisLabel: { formatter: '{value}%', color: '#668493', fontSize: 9 }, splitLine: axis.splitLine },
   series: [
     { name:'规则基线',type:'bar',data:[82.1,58.4,51.2,46.8] }, { name:'RAG Agent',type:'bar',data:[91.5,76.8,84.7,65.2] }, { name:'Evidence v3.3',type:'bar',data:[96.9,84.2,93.5,74.1] }, { name:'Evidence v3.4',type:'bar',data:[98.7,86.9,96.8,78.4], itemStyle:{ borderRadius:[3,3,0,0] } },
@@ -119,7 +120,7 @@ export function EvaluationView({ sample }: { sample?: EvaluationSample | null })
       <article className="panel chart-panel experiment-panel"><div className="chart-card-head"><div><span>EXPERIMENT COMPARISON</span><h3>模型与 Prompt 实验对比</h3></div><small>Dataset v2026.08 · 2,480 Cases</small></div><EChart option={experimentOption} summary="Evidence Agent v3.4 在四项核心指标中均领先。" /></article>
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>SEVERITY RECALL</span><h3>分级故障召回率</h3></div><small>P0 目标 99%</small></div><EChart option={severityOption} summary="P0 召回率 98.7%，距离 99% 目标仍差 0.3 个百分点。" /></article>
       <article className="panel matrix-panel"><div className="chart-card-head"><div><span>VERIFY CONFUSION MATRIX</span><h3>核验混淆矩阵</h3></div><small>Precision 91.4% · Recall 98.7%</small></div><div className="matrix"><span /><b>预测故障</b><b>预测正常</b><strong>真实故障</strong><em className="tp">1,842<small>TP</small></em><em className="fn">24<small>FN</small></em><strong>真实正常</strong><em className="fp">173<small>FP</small></em><em className="tn">441<small>TN</small></em></div></article>
-      <article className="panel bad-case-panel"><div className="chart-card-head"><div><span>FAILURE FEEDBACK</span><h3>Bad Case 回流队列</h3></div><button>查看数据集<ChevronRight size={13}/></button></div><div className="incident-table-wrap"><table><thead><tr><th>Case</th><th>等级</th><th>环节</th><th>失败摘要</th><th>归因</th><th>状态</th></tr></thead><tbody>{badCases.map((row)=><tr key={row[0]}>{row.map((cell,index)=><td key={cell}>{index===0?<strong>{cell}</strong>:cell}</td>)}</tr>)}</tbody></table></div></article>
+      <article className="panel bad-case-panel"><div className="chart-card-head"><div><span>FAILURE FEEDBACK</span><h3>Bad Case 回流队列</h3></div><small>人工复核 · 每日回流</small></div><div className="incident-table-wrap"><table><thead><tr><th>Case</th><th>等级</th><th>环节</th><th>失败摘要</th><th>归因</th><th>状态</th></tr></thead><tbody>{badCases.map((row)=><tr key={row[0]}>{row.map((cell,index)=><td key={cell}>{index===0?<strong>{cell}</strong>:cell}</td>)}</tr>)}</tbody></table></div></article>
     </section>
   </div>;
 }

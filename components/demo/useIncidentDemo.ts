@@ -13,7 +13,9 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
   const store = useCallback(
     (next: IncidentRun) => {
       setRun(next);
-      if (persist && typeof window !== 'undefined') saveMockRun(window.localStorage, next);
+      // 仅持久化 Mock 进度（README 承诺范围）；LLM run 不写入，避免「写入后被读取侧
+      // 拒收并静默删除」的读写不对称。saveMockRun 内部自带配额/禁用兜底，不会抛错。
+      if (persist && next.mode === 'mock' && typeof window !== 'undefined') saveMockRun(window.localStorage, next);
     },
     [persist],
   );
@@ -24,9 +26,16 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
       setBusy(true);
       setError(null);
       try {
-        const restored = persist && typeof window !== 'undefined'
-          ? loadMockRun(window.localStorage)
-          : null;
+        // localStorage 属性访问本身在「阻止所有 Cookie」等环境下会抛 SecurityError，
+        // 读取失败时降级为全新 run，而不是把初始化错误卡在加载态。
+        let restored: IncidentRun | null = null;
+        if (persist && typeof window !== 'undefined') {
+          try {
+            restored = loadMockRun(window.localStorage);
+          } catch {
+            restored = null;
+          }
+        }
         const initial = restored
           ? runtime.restoreRun?.(restored) ?? await runtime.getRun(restored.id).catch(() => runtime.createIncident('gateway-timeout'))
           : await runtime.createIncident('gateway-timeout');

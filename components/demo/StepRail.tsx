@@ -29,8 +29,9 @@ export function StepRail({
           const completed = run.completedStages.includes(stage);
           const executed = Boolean(run.executions[stage]);
           const approval = stage === 'contact' && run.status === 'awaiting_approval';
-          const current = run.currentStage === stage && !approval;
-          const status = approval ? '待审批' : completed ? '已完成' : current ? '当前步骤' : '待执行';
+          const human = stage === 'contact' && run.status === 'needs_human';
+          const current = run.currentStage === stage && !approval && !human;
+          const status = approval ? '待审批' : human ? '已转人工' : completed ? '已完成' : current ? '当前步骤' : '待执行';
           const selectable = executed;
           return (
             <li key={stage} className={`${selectedStage === stage ? 'is-selected' : ''} ${completed ? 'is-complete' : ''}`}>

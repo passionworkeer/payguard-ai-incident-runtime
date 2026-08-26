@@ -19,8 +19,9 @@ export function RuntimeModeSwitch({
       <button
         type="button"
         aria-pressed={mode === 'llm'}
-        disabled={busy || llmReady === false}
-        title={llmReady === false ? '真实 LLM 未配置：检查 .env.local 中的 key / url / model' : undefined}
+        // 配置状态未加载完成（null）前同样禁用，避免进入未配置的真实模式。
+        disabled={busy || llmReady !== true}
+        title={llmReady === false ? '真实 LLM 未配置：检查 .env.local 中的 key / url / model' : llmReady === null ? '正在检查真实 LLM 配置…' : undefined}
         onClick={() => onSwitch('llm')}
       >
         真实 LLM

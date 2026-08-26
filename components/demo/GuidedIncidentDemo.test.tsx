@@ -92,6 +92,46 @@ describe('GuidedIncidentDemo', () => {
     expect(await screen.findByRole('button', { name: '下一步：执行故障升级' })).toBeVisible();
   });
 
+  it('shows a terminal human-handling state after rejecting outreach and can restart', async () => {
+    const user = userEvent.setup();
+    render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} persist={false} />);
+
+    await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
+    await user.click(await screen.findByRole('button', { name: '下一步：进入定位分析' }));
+    await user.click(await screen.findByRole('button', { name: '下一步：生成商户触达方案' }));
+    await user.click(await screen.findByRole('button', { name: '转人工处理' }));
+
+    // 终态可见：状态文本、步骤轨、人工处理 chip；主执行按钮不再出现。
+    expect(await screen.findByText('已转人工处理')).toBeVisible();
+    expect(screen.getByRole('button', { name: '商户触达，已转人工' })).toBeVisible();
+    expect(screen.getByText('⏸ 已转人工 · 流程暂停，可重置演示重新开始')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /下一步|批准并发送|转人工处理/ })).not.toBeInTheDocument();
+
+    // 重置后回到第一步，可重新开始完整演示。
+    await user.click(screen.getByRole('button', { name: '重置演示' }));
+    expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
+    expect(screen.queryByText(/已转人工/)).not.toBeInTheDocument();
+  });
+
+  it('surfaces LLM initialization failures with a path back to Mock', async () => {
+    class CreateFailsRuntime extends FakeLlmRuntime {
+      override async createIncident(): Promise<IncidentRun> {
+        throw new Error('真实 LLM 网络请求失败。');
+      }
+    }
+    const user = userEvent.setup();
+    renderDemo({ llmRuntime: new CreateFailsRuntime() });
+
+    await user.click(await screen.findByRole('button', { name: '真实 LLM' }));
+
+    expect(await screen.findByText(/初始化失败：真实 LLM 网络请求失败。/)).toBeVisible();
+    const backToMock = await screen.findByRole('button', { name: '切回 Mock 演示' });
+    await user.click(backToMock);
+
+    expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
+    expect(screen.queryByText(/初始化失败/)).not.toBeInTheDocument();
+  });
+
   it('can inspect completed history without advancing the run', async () => {
     const user = userEvent.setup();
     render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} persist={false} />);
