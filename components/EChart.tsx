@@ -46,9 +46,8 @@ export default function EChart({ option, summary, className = '', onSelect }: EC
   }, [onSelect, option]);
 
   return (
-    <div className={`echart-shell ${className}`}>
+    <div className={`echart-shell ${className}`} role="img" aria-label={summary}>
       <div className="echart-canvas" ref={containerRef} aria-hidden="true" />
-      <p className="sr-only">{summary}</p>
     </div>
   );
 }
