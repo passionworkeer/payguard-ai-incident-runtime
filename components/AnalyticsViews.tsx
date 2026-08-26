@@ -68,6 +68,18 @@ function MiniMetric({ icon: Icon, label, value, helper, tone = 'cyan' }: { icon:
 
 export function FlowAnalyticsView() {
   const [selectedFlow, setSelectedFlow] = useState('全部链路');
+  const showAll = selectedFlow === '全部链路' || !sankeyNodes.some((node) => node.name === selectedFlow);
+  const filteredLinks = showAll
+    ? sankeyLinks
+    : sankeyLinks.filter((link) => link.source === selectedFlow || link.target === selectedFlow);
+  const filteredSankeyOption: EChartsOption = {
+    ...sankeyOption,
+    series: [{
+      ...(sankeyOption.series as object[])[0],
+      data: sankeyNodes,
+      links: filteredLinks,
+    }],
+  };
   return <div className="view-page">
     <ViewHeader eyebrow="FLOW INTELLIGENCE" title="全链路处置分析" description="从告警进入到恢复确认，识别每个环节的转化、耗时和 AI 贡献。" />
     <section className="mini-metric-grid">
@@ -78,7 +90,7 @@ export function FlowAnalyticsView() {
     </section>
     <section className="analysis-grid analysis-main">
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>STAGE CONVERSION</span><h3>全链路处置漏斗</h3></div><small>基于 12,847 条告警</small></div><EChart option={funnelOption} summary="12,847 条告警最终确认恢复 1,439 起，端到端转化率 11.2%。" /></article>
-      <article className="panel chart-panel wide"><div className="chart-card-head"><div><span>INCIDENT JOURNEY</span><h3>告警去向与处置路径</h3></div><small>已选：{selectedFlow}</small></div><EChart option={sankeyOption} summary="告警从来源流向核验结果、根因、处置动作和恢复结果。" onSelect={setSelectedFlow} /></article>
+      <article className="panel chart-panel wide"><div className="chart-card-head"><div><span>INCIDENT JOURNEY</span><h3>告警去向与处置路径</h3></div><button type="button" onClick={() => setSelectedFlow('全部链路')}>已选：{selectedFlow} {showAll ? '' : '↺'}</button></div><EChart option={filteredSankeyOption} summary={`告警从来源流向核验结果、根因、处置动作和恢复结果${showAll ? '' : `，当前聚焦 ${selectedFlow} 节点`}。`} onSelect={setSelectedFlow} /></article>
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>STAGE LATENCY</span><h3>逐环节 AI 耗时</h3></div><small>P50 / P95 / SLA</small></div><EChart option={latencyOption} summary="定位分析是耗时最长环节，P95 为 8.92 秒，仍低于 9 秒 SLA。" /></article>
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>TOOL ADOPTION</span><h3>工具调用量与成功率</h3></div><small>6 类核心工具</small></div><EChart option={toolOption} summary="Metrics 工具使用最多，所有工具成功率均高于 94%。" /></article>
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>MERCHANT ENGAGEMENT</span><h3>商户触达行为漏斗</h3></div><small>点击率 64.8%</small></div><EChart option={channelOption} summary="1,522 次送达产生 986 次点击与 542 次回复。" /></article>

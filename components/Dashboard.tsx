@@ -28,7 +28,12 @@ export default function Dashboard() {
 
   const handleRunChange = useCallback((run: IncidentRun) => {
     setRuntimeMode(run.mode);
-    if (run.status === 'completed') setEvaluationSample(createEvaluationSample(run));
+    // 全链路刚跑完 → 用本次 Run 生成的样本；其余状态保留上一个样本，避免重置/继续操作把已展示的样本突然清空。
+    if (run.status === 'completed') {
+      setEvaluationSample(createEvaluationSample(run));
+    } else if (run.status === 'idle' && run.completedStages.length === 0) {
+      setEvaluationSample(null);
+    }
   }, []);
 
   return (

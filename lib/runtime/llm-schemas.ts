@@ -149,7 +149,8 @@ function pickOutput(stage: IncidentStage, value: unknown): Record<string, unknow
       const teams = asStrings(value.teams);
       const sla = asString(value.sla);
       const escalationReason = asString(value.escalationReason);
-      if (!ticketTitle || !teams || !sla || !escalationReason || value.simulatedAction !== true) return null;
+      // simulatedAction 是意图声明而非业务字段；模型可能返回 true / "true" / 1，宽松归一到布尔。
+      if (!ticketTitle || !teams || !sla || !escalationReason || !value.simulatedAction) return null;
       return { ticketTitle, teams, sla, escalationReason, simulatedAction: true };
     }
     case 'recover': {

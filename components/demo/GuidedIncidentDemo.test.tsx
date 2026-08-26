@@ -217,7 +217,7 @@ describe('GuidedIncidentDemo', () => {
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
     expect(await screen.findByText('执行异常：真实 LLM 上游暂不可用。')).toBeVisible();
-    expect(screen.getByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '重试：执行智能核验' })).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: '切回 Mock 演示' }));
 

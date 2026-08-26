@@ -26,6 +26,9 @@ const actionLabels: Record<IncidentStage, string> = {
 const builtInImageUrl = '/mock/merchant-monitor.png';
 const builtInImageMeta: VerifyImageMeta = { name: '内置合成监控截图', detail: 'PNG · 合成监控面板' };
 
+// 真实模式单步常见 8-25s：超过 6s 仍未返回就开始展示等待提示；累计等待在主操作按钮上展示以秒级计时。
+const SLOW_HINT_DELAY_MS = 6000;
+
 export interface ConfigurableLlmRuntime extends IncidentRuntime {
   getPublicConfig(): Promise<PublicLlmConfig>;
   setVerifyImage(image: StageImage): void;
@@ -50,10 +53,26 @@ export default function GuidedIncidentDemo({
   const [verifyImage, setVerifyImage] = useState<StageImage | null>(initialLlmImage ?? null);
   const [imageMeta, setImageMeta] = useState<VerifyImageMeta | null>(initialLlmImage ? builtInImageMeta : null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageReloadKey, setImageReloadKey] = useState(0);
   const activeRuntime = mode === 'llm' && llmRuntime ? llmRuntime : ownedRuntime;
   const demo = useIncidentDemo(activeRuntime, persist);
   const run = demo.run;
+  // locked 仅在“已有 run 且正在执行”时为 true，用于阻止运行模式切换按钮；初始化阶段 (run=null) 不锁。
   const locked = demo.busy && run !== null;
+  // 真实模式实时等待计时：覆盖慢 / 极慢两类体感。setElapsedMs 是订阅式 interval 的「首次渲染与退出清理」，
+  // 这是按区间计算时间唯一可行写法，不属于「用 effect 从 props / render 派生 state」的反模式。
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!demo.busy || mode !== 'llm') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    setElapsedMs(0);
+    const id = window.setInterval(() => setElapsedMs(Date.now() - start), 250);
+    return () => window.clearInterval(id);
+  }, [demo.busy, mode]);
 
   useEffect(() => {
     if (run) onRunChange?.(run);
@@ -97,32 +116,28 @@ export default function GuidedIncidentDemo({
         applyImage({ mediaType, data, source: 'built_in' }, { name: builtInImageMeta.name, detail: imageDetailLabel(mediaType, blob.size) });
         setImageError(null);
       } catch {
-        if (active) setImageError('内置监控截图加载失败，可上传本地图片替代。');
+        if (active) setImageError('内置监控截图加载失败，可上传本地图片，或稍后重试。');
       }
     })();
     return () => {
       active = false;
     };
-  }, [applyImage, llmRuntime, mode, verifyImage]);
+  }, [applyImage, imageReloadKey, llmRuntime, mode, verifyImage]);
 
   const switchMode = useCallback((next: DemoRuntimeMode) => {
     if (!llmRuntime || locked || next === mode) return;
+    // 已推进到 ≥1 步或处于人工审批 / 转人工终态时再次确认：跨模式切换会清空进度，且真实模式下的不可恢复消耗一并消失。
+    const hasProgress = !!run && (run.completedStages.length > 0 || run.status === 'awaiting_approval' || run.status === 'needs_human');
+    if (hasProgress && typeof window !== 'undefined' && !window.confirm(`切换运行模式将丢弃当前 ${run.completedStages.length} 步进度和${run.status === 'awaiting_approval' ? '待审批内容' : run.status === 'needs_human' ? '人工处置说明' : '当前运行'}。确认继续？`)) {
+      return;
+    }
     if (next === 'llm' && verifyImage) llmRuntime.setVerifyImage(verifyImage);
     if (persist && typeof window !== 'undefined') clearMockRun(window.localStorage);
     setMode(next);
-  }, [llmRuntime, locked, mode, persist, verifyImage]);
+  }, [llmRuntime, locked, mode, persist, run, verifyImage]);
 
-  const [slowHint, setSlowHint] = useState(false);
-  const [wasBusy, setWasBusy] = useState(false);
-  if (wasBusy !== demo.busy) {
-    setWasBusy(demo.busy);
-    if (!demo.busy) setSlowHint(false);
-  }
-  useEffect(() => {
-    if (!demo.busy || mode !== 'llm') return;
-    const timer = setTimeout(() => setSlowHint(true), 2000);
-    return () => clearTimeout(timer);
-  }, [demo.busy, mode]);
+  const showSlowHint = demo.busy && mode === 'llm' && elapsedMs > SLOW_HINT_DELAY_MS;
+  const elapsedSecLabel = demo.busy && mode === 'llm' && elapsedMs > 1500 ? `${Math.floor(elapsedMs / 1000)}s` : null;
 
   const expectedRunMode = mode === 'llm' ? 'llm' : 'mock';
   const runMatchesMode = run?.mode === expectedRunMode;
@@ -152,7 +167,15 @@ export default function GuidedIncidentDemo({
           onRestore={() => applyImage(initialLlmImage ?? null, initialLlmImage ? builtInImageMeta : null)}
         />
       ) : mode === 'llm' && !verifyImage ? (
-        <span className="verify-image-hint">{imageError ?? '正在加载内置监控截图…'}</span>
+        <span className="verify-image-hint" role={imageError ? 'alert' : undefined}>
+          {imageError ?? '正在加载内置监控截图…'}
+          {imageError ? (
+            <>
+              {' '}
+              <button type="button" className="verify-image-retry" onClick={() => { setImageError(null); setImageReloadKey((k) => k + 1); }}>重新加载</button>
+            </>
+          ) : null}
+        </span>
       ) : null}
     </section>
   ) : null;
@@ -177,6 +200,13 @@ export default function GuidedIncidentDemo({
   const needsHuman = run.status === 'needs_human';
   // 真实模式的智能核验必须有图：图片未就绪时禁用执行，避免必然失败的误导性 IMAGE_INVALID。
   const verifyImagePending = mode === 'llm' && run.currentStage === 'verify' && !verifyImage;
+
+  // 真实模式的执行按钮需要在确认前提前声明剩余占用，避免长耗时里用户反复点；这是已在按钮上叠加秒级计时器的关键输入。
+  const primaryActionLabel = (() => {
+    if (verifyImagePending && !demo.busy) return '等待核验图片就绪…';
+    if (demo.busy) return mode === 'llm' ? `真实 LLM 正在执行… ${elapsedSecLabel ?? ''}`.trim() : 'AI 正在执行…';
+    return actionLabels[run.currentStage];
+  })();
 
   return (
     <div className="guided-demo" aria-busy={demo.busy}>
@@ -218,8 +248,8 @@ export default function GuidedIncidentDemo({
               ? `执行异常：${demo.error}`
               : needsHuman
                 ? (run.humanReason ?? '等待值班人员介入处置。')
-                : slowHint && demo.busy
-                  ? '真实 LLM 正在分析图片与证据，耗时不确定，请稍候…'
+                : showSlowHint
+                  ? `真实 LLM 正在分析图片与证据，预计 10–25 秒，已等待 ${elapsedSecLabel}…`
                   : '一次点击只推进一个业务步骤，历史结果不会被覆盖。'}
           </small>
         </div>
@@ -240,12 +270,14 @@ export default function GuidedIncidentDemo({
           ) : (
             <button
               type="button"
-              className="demo-primary-action"
+              className={`demo-primary-action${demo.busy ? ' is-busy' : ''}`}
               onClick={demo.execute}
               disabled={demo.busy || verifyImagePending}
               title={verifyImagePending ? '正在等待核验图片就绪' : undefined}
+              aria-busy={demo.busy}
             >
-              {verifyImagePending && !demo.busy ? '等待核验图片就绪…' : demo.busy ? (mode === 'llm' ? '真实 LLM 正在执行…' : 'AI 正在执行…') : actionLabels[run.currentStage]}
+              {demo.busy ? <span className="demo-spinner" aria-hidden="true" /> : null}
+              {demo.error && mode === 'llm' ? `重试：${actionLabels[run.currentStage].replace(/^.*：/, '')}` : primaryActionLabel}
             </button>
           )}
         </div>
