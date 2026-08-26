@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
+import { saveMockRun } from '../../lib/runtime/persistence';
 import GuidedIncidentDemo from './GuidedIncidentDemo';
 
 describe('GuidedIncidentDemo', () => {
@@ -44,5 +45,19 @@ describe('GuidedIncidentDemo', () => {
 
     expect(screen.getByRole('heading', { name: '智能核验结果' })).toBeVisible();
     expect(screen.getByText('2 / 6 步已执行')).toBeVisible();
+  });
+
+  it('rehydrates the saved mock run after a page refresh', async () => {
+    localStorage.clear();
+    const previousRuntime = new MockIncidentRuntime();
+    const created = await previousRuntime.createIncident('gateway-timeout');
+    const verified = await previousRuntime.executeStage(created.id, 'verify');
+    saveMockRun(localStorage, verified.run);
+
+    render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} />);
+
+    expect(await screen.findByText('1 / 6 步已执行')).toBeVisible();
+    expect(screen.getByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
+    localStorage.clear();
   });
 });

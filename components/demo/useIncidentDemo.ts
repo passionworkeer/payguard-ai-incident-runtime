@@ -27,7 +27,7 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
           ? loadMockRun(window.localStorage)
           : null;
         const initial = restored
-          ? await runtime.getRun(restored.id).catch(() => runtime.createIncident('gateway-timeout'))
+          ? runtime.restoreRun?.(restored) ?? await runtime.getRun(restored.id).catch(() => runtime.createIncident('gateway-timeout'))
           : await runtime.createIncident('gateway-timeout');
         if (active) {
           store(initial);

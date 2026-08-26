@@ -26,11 +26,12 @@ export function StepRail({
       </div>
       <ol>
         {stageOrder.map((stage, index) => {
-          const completed = Boolean(run.executions[stage]);
+          const completed = run.completedStages.includes(stage);
+          const executed = Boolean(run.executions[stage]);
           const approval = stage === 'contact' && run.status === 'awaiting_approval';
           const current = run.currentStage === stage && !approval;
           const status = approval ? '待审批' : completed ? '已完成' : current ? '当前步骤' : '待执行';
-          const selectable = completed;
+          const selectable = executed;
           return (
             <li key={stage} className={`${selectedStage === stage ? 'is-selected' : ''} ${completed ? 'is-complete' : ''}`}>
               <button

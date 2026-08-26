@@ -18,6 +18,11 @@ export class MockIncidentRuntime implements IncidentRuntime {
     initialRuns.forEach((run) => this.runs.set(run.id, clone(run)));
   }
 
+  restoreRun(run: IncidentRun): IncidentRun {
+    this.runs.set(run.id, clone(run));
+    return clone(run);
+  }
+
   async createIncident(scenarioId: string): Promise<IncidentRun> {
     const scenario = runtimeScenarios[scenarioId];
     if (!scenario) throw new Error('scenario_not_found');

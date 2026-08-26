@@ -89,6 +89,7 @@ export interface RuntimeScenario {
 }
 
 export interface IncidentRuntime {
+  restoreRun?(run: IncidentRun): IncidentRun;
   createIncident(scenarioId: string): Promise<IncidentRun>;
   executeStage(
     runId: string,
