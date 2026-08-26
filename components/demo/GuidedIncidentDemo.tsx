@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
-import type { IncidentRuntime, IncidentStage } from '../../lib/runtime/types';
+import type { IncidentRun, IncidentRuntime, IncidentStage } from '../../lib/runtime/types';
 import { DesignPanel } from './DesignPanel';
 import { StageWorkspace } from './StageWorkspace';
 import { StepRail } from './StepRail';
@@ -24,17 +24,19 @@ export default function GuidedIncidentDemo({
 }: {
   runtime?: IncidentRuntime;
   persist?: boolean;
-  onRunChange?: (runId: string) => void;
+  onRunChange?: (run: IncidentRun) => void;
 }) {
-  const ownedRuntime = useRef<IncidentRuntime>(runtime ?? new MockIncidentRuntime());
-  const demo = useIncidentDemo(ownedRuntime.current, persist);
+  const [ownedRuntime] = useState<IncidentRuntime>(() => runtime ?? new MockIncidentRuntime());
+  const demo = useIncidentDemo(ownedRuntime, persist);
   const run = demo.run;
+
+  useEffect(() => {
+    if (run) onRunChange?.(run);
+  }, [onRunChange, run]);
 
   if (!run) {
     return <div className="demo-loading" aria-live="polite">正在装载演示场景…</div>;
   }
-  onRunChange?.(run.id);
-
   const execution = run.executions[demo.selectedStage];
   const awaitingApproval = run.status === 'awaiting_approval';
   const completed = run.status === 'completed';

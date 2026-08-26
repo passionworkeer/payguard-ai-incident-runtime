@@ -3,6 +3,7 @@
 import type { EChartsOption } from 'echarts';
 import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronRight, CircleDollarSign, Filter, MousePointerClick, Sparkles, Target, TimerReset } from 'lucide-react';
 import { useState } from 'react';
+import type { EvaluationSample } from '../lib/runtime/evaluation';
 import EChart from './EChart';
 
 const axis = { axisLine: { lineStyle: { color: '#24404d' } }, axisLabel: { color: '#668493', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(143,174,194,.07)' } } };
@@ -104,9 +105,10 @@ const badCases = [
   ['EVAL-0816','P1','触达','排查建议未匹配商户技术等级','画像缺失','已回流'],
 ];
 
-export function EvaluationView() {
+export function EvaluationView({ sample }: { sample?: EvaluationSample | null }) {
   return <div className="view-page">
     <ViewHeader eyebrow="AI QUALITY SYSTEM" title="智能化效果评测" description="把核验、定位、证据与动作质量产品化，形成离线回放到线上 Bad Case 的持续优化闭环。" />
+    {sample ? <article className="panel current-evaluation-sample"><div><span>本次演示样本</span><strong>{sample.sampleId}</strong></div><dl><div><dt>核验结果</dt><dd>{sample.predictedIncident ? '真实故障 / TP' : '正常'}</dd></div><div><dt>预测根因</dt><dd>{sample.predictedRootCause}</dd></div><div><dt>最终根因</dt><dd>{sample.finalRootCause}</dd></div><div><dt>人工修正</dt><dd>{sample.humanCorrected ? '是' : '否'}</dd></div></dl></article> : null}
     <section className="mini-metric-grid">
       <MiniMetric icon={Target} label="核验 F1" value="94.9%" helper="Precision 91.4%" />
       <MiniMetric icon={CheckCircle2} label="根因 Top-3" value="96.2%" helper="Top-1 86.9%" tone="green" />

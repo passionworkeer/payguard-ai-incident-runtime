@@ -4,6 +4,19 @@ import { describe, expect, it } from 'vitest';
 import Dashboard from './Dashboard';
 
 describe('dashboard navigation', () => {
+  it('uses the guided run as the default and exposes only functional modules', async () => {
+    render(<Dashboard />);
+
+    expect(await screen.findByRole('heading', { name: '支付接口超时率突增' })).toBeVisible();
+    for (const item of ['处置演示', '事故中心', '流程分析', 'AI 评测']) {
+      expect(screen.getByRole('button', { name: new RegExp(item) })).toBeVisible();
+    }
+    for (const removed of ['数据集', 'Prompt 版本', '系统设置', '运营总览']) {
+      expect(screen.queryByRole('button', { name: removed })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText('AI 自动处置率')).not.toBeInTheDocument();
+  });
+
   it('opens the flow analytics workspace', async () => {
     const user = userEvent.setup();
     render(<Dashboard />);
@@ -27,10 +40,4 @@ describe('dashboard navigation', () => {
     expect(screen.getByText('TIMEOUT 错误码增加 23.4 倍')).toBeVisible();
   });
 
-  it('opens the priority incident trace from the overview', async () => {
-    const user = userEvent.setup();
-    render(<Dashboard />);
-    await user.click(screen.getByRole('button', { name: '查看完整证据链' }));
-    expect(screen.getByRole('dialog', { name: '事故详情' })).toBeVisible();
-  });
 });
