@@ -103,4 +103,54 @@ describe('ServerIncidentOrchestrator', () => {
     expect(error).toMatchObject({ code: 'LLM_NO_TOOL' });
     expect(caller).toHaveBeenCalledTimes(2);
   });
+
+  it('rejects prototype-chain scenario ids like toString', async () => {
+    const orchestrator = new ServerIncidentOrchestrator(vi.fn());
+
+    await expect(orchestrator.createIncident('toString')).rejects.toThrow('scenario_not_found');
+    await expect(orchestrator.createIncident('hasOwnProperty')).rejects.toThrow('scenario_not_found');
+  });
+
+  it('serializes concurrent commands so late responses cannot rewind the run', async () => {
+    const caller = vi.fn().mockImplementation(({ stage }: { stage: string }) => Promise.resolve(llmResult(stage)));
+    const orchestrator = new ServerIncidentOrchestrator(caller);
+    const run = await orchestrator.createIncident('gateway-timeout');
+
+    const [first, second] = await Promise.allSettled([
+      orchestrator.executeStage(run.id, 'verify', image),
+      orchestrator.executeStage(run.id, 'verify', image),
+    ]);
+
+    const outcomes = [first.status, second.status].sort();
+    expect(outcomes).toEqual(['fulfilled', 'rejected']);
+    if (second.status === 'rejected') expect(second.reason).toBeInstanceOf(Error);
+    // 只有一次真实调用被计费，run 状态只前进了一格。
+    expect(caller).toHaveBeenCalledTimes(1);
+    expect(await orchestrator.getRun(run.id)).toMatchObject({ currentStage: 'locate', completedStages: ['verify'] });
+  });
+
+  it('accumulates token usage across a parse-variance retry', async () => {
+    const caller = vi.fn()
+      .mockResolvedValueOnce({ ok: false, code: 'LLM_INVALID_OUTPUT', message: '模型结果未通过阶段 Schema 校验。', retryable: true, usage: { inputTokens: 80, outputTokens: 30 } })
+      .mockResolvedValueOnce(llmResult('verify'));
+    const orchestrator = new ServerIncidentOrchestrator(caller);
+    const run = await orchestrator.createIncident('gateway-timeout');
+
+    const result = await orchestrator.executeStage(run.id, 'verify', image);
+
+    expect(result.execution.metrics).toMatchObject({ inputTokens: 180, outputTokens: 70 });
+  });
+
+  it('resets to a fresh run and forgets the old one', async () => {
+    const caller = vi.fn().mockImplementation(({ stage }: { stage: string }) => Promise.resolve(llmResult(stage)));
+    const orchestrator = new ServerIncidentOrchestrator(caller);
+    const run = await orchestrator.createIncident('gateway-timeout');
+    await orchestrator.executeStage(run.id, 'verify', image);
+
+    const fresh = await orchestrator.resetRun(run.id);
+
+    expect(fresh).toMatchObject({ mode: 'llm', status: 'idle', currentStage: 'verify', completedStages: [] });
+    expect(fresh.id).not.toBe(run.id);
+    await expect(orchestrator.getRun(run.id)).rejects.toThrow('run_not_found');
+  });
 });

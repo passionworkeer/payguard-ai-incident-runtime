@@ -22,12 +22,25 @@ export class LlmRuntimeError extends Error {
 
 export class ServerIncidentOrchestrator implements IncidentRuntime {
   private runs = new Map<string, IncidentRun>();
+  // 同一 run 的命令串行执行：execute 的守卫检查与状态变更之间隔着真实 LLM 调用，
+  // 并发命令若不排队，迟到响应会把 run 状态打回早期阶段（状态机倒退 + 重复计费）。
+  private inflight = new Map<string, Promise<unknown>>();
 
   constructor(private readonly caller: LlmCaller = callStageLlm) {}
 
+  private serialized<T>(runId: string, action: () => Promise<T>): Promise<T> {
+    const queued = (this.inflight.get(runId) ?? Promise.resolve()).catch(() => undefined).then(action);
+    this.inflight.set(runId, queued);
+    return queued.finally(() => {
+      if (this.inflight.get(runId) === queued) this.inflight.delete(runId);
+    });
+  }
+
   async createIncident(scenarioId: string): Promise<IncidentRun> {
+    // Object.hasOwn 防止 'toString' 等原型链继承键绕过场景校验。
+    if (!Object.hasOwn(runtimeScenarios, scenarioId)) throw new Error('scenario_not_found');
+    this.evictStaleRuns();
     const scenario = runtimeScenarios[scenarioId];
-    if (!scenario) throw new Error('scenario_not_found');
     const run: IncidentRun = {
       id: `LLM-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       scenarioId,
@@ -43,6 +56,14 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
   }
 
   async executeStage(
+    runId: string,
+    stage: IncidentStage,
+    image?: StageImage,
+  ): Promise<{ run: IncidentRun; execution: StageExecution }> {
+    return this.serialized(runId, () => this.executeStageLocked(runId, stage, image));
+  }
+
+  private async executeStageLocked(
     runId: string,
     stage: IncidentStage,
     image?: StageImage,
@@ -71,8 +92,17 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       image,
     } as const;
     let result = await this.caller(request);
+    // 重试与首调都计费：累计所有调用的 token，观测面板才不会系统性低估。
+    const usage = { inputTokens: 0, outputTokens: 0 };
+    const addUsage = (used: { inputTokens: number; outputTokens: number } | undefined) => {
+      if (!used) return;
+      usage.inputTokens += used.inputTokens;
+      usage.outputTokens += used.outputTokens;
+    };
+    addUsage(result.usage);
     if (!result.ok && (result.code === 'LLM_NO_TOOL' || result.code === 'LLM_INVALID_OUTPUT')) {
       result = await this.caller(request);
+      addUsage(result.usage);
     }
     if (!result.ok) throw new LlmRuntimeError(result.code, result.message, result.retryable);
 
@@ -89,8 +119,8 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       ],
       metrics: {
         latencyMs: result.durationMs,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
         costYuan: 0,
         confidence: result.confidence,
         toolCalls: 1,
@@ -114,6 +144,10 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
   }
 
   async approveAction(runId: string, actionId: string): Promise<IncidentRun> {
+    return this.serialized(runId, () => this.approveActionLocked(runId, actionId));
+  }
+
+  private async approveActionLocked(runId: string, actionId: string): Promise<IncidentRun> {
     const run = this.requireRun(runId);
     if (run.status !== 'awaiting_approval' || run.pendingApproval?.id !== actionId) throw new Error('approval_not_found');
     run.pendingApproval = undefined;
@@ -122,6 +156,10 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
   }
 
   async rejectAction(runId: string, actionId: string, reason: string): Promise<IncidentRun> {
+    return this.serialized(runId, () => this.rejectActionLocked(runId, actionId, reason));
+  }
+
+  private async rejectActionLocked(runId: string, actionId: string, reason: string): Promise<IncidentRun> {
     const run = this.requireRun(runId);
     if (run.status !== 'awaiting_approval' || run.pendingApproval?.id !== actionId) throw new Error('approval_not_found');
     run.status = 'needs_human';
@@ -135,9 +173,22 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
   }
 
   async resetRun(runId: string): Promise<IncidentRun> {
-    const run = this.requireRun(runId);
-    this.runs.delete(runId);
-    return this.createIncident(run.scenarioId);
+    return this.serialized(runId, async () => {
+      const run = this.requireRun(runId);
+      this.runs.delete(runId);
+      return this.createIncident(run.scenarioId);
+    });
+  }
+
+  // runs 只增不减会随长时间运行的 dev server 累积；超过上限时淘汰最早且不在执行中的 run。
+  private evictStaleRuns() {
+    const MAX_RUNS = 50;
+    if (this.runs.size < MAX_RUNS) return;
+    for (const runId of this.runs.keys()) {
+      if (this.runs.size < MAX_RUNS) break;
+      if (this.inflight.has(runId)) continue;
+      this.runs.delete(runId);
+    }
   }
 
   private requireRun(runId: string) {

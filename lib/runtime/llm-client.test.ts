@@ -118,6 +118,63 @@ describe('multimodal LLM client', () => {
     expect(JSON.stringify(result)).not.toContain('upstream leaked');
   });
 
+  it('marks deterministic failures as non-retryable', async () => {
+    const unauthorized = await callStageLlm({
+      config,
+      stage: 'locate',
+      context: {},
+      fetchImpl: vi.fn().mockResolvedValue(new Response('denied', { status: 401 })),
+    });
+    expect(unauthorized).toMatchObject({ ok: false, code: 'LLM_UNAUTHORIZED', retryable: false });
+
+    const badImage = await callStageLlm({
+      config,
+      stage: 'verify',
+      context: {},
+      image: { mediaType: 'image/png', data: 'not base64!', source: 'built_in' },
+      fetchImpl: vi.fn(),
+    });
+    expect(badImage).toMatchObject({ ok: false, code: 'IMAGE_INVALID', retryable: false });
+  });
+
+  it('reports max_tokens truncation as a distinct non-retryable error with usage', async () => {
+    const truncated = new Response(JSON.stringify({
+      content: [{ type: 'tool_use', name: 'submit_verify_result', input: verifyToolInput }],
+      stop_reason: 'max_tokens',
+      usage: { input_tokens: 400, output_tokens: 4096 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    const result = await callStageLlm({
+      config,
+      stage: 'verify',
+      context: {},
+      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
+      fetchImpl: vi.fn().mockResolvedValue(truncated),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'LLM_TRUNCATED',
+      retryable: false,
+      usage: { inputTokens: 400, outputTokens: 4096 },
+    });
+  });
+
+  it('carries token usage on schema-validation failures', async () => {
+    const result = await callStageLlm({
+      config,
+      stage: 'verify',
+      context: {},
+      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
+      fetchImpl: vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        content: [{ type: 'tool_use', name: 'submit_verify_result', input: { output: { isIncident: 'yes' } } }],
+        usage: { input_tokens: 250, output_tokens: 90 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'LLM_INVALID_OUTPUT', usage: { inputTokens: 250, outputTokens: 90 } });
+  });
+
   it('defines one strict tool for every incident stage', () => {
     expect(Object.keys(stageToolDefinitions)).toEqual(stageOrder);
     for (const stage of stageOrder) {

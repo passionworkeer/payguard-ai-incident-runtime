@@ -22,6 +22,7 @@ export type LlmErrorCode =
   | 'LLM_UPSTREAM_ERROR'
   | 'LLM_NO_TOOL'
   | 'LLM_INVALID_OUTPUT'
+  | 'LLM_TRUNCATED'
   | 'IMAGE_INVALID';
 
 export type StageLlmResult = {
@@ -39,6 +40,9 @@ export type StageLlmResult = {
   code: LlmErrorCode;
   message: string;
   retryable: boolean;
+  // 已产生计费但结构未过校验的调用（如 Schema 失败、max_tokens 截断）会带上实际用量，
+  // 供编排器累计，避免观测面板系统性低估。
+  usage?: { inputTokens: number; outputTokens: number };
 };
 
 interface CallStageRequest {
@@ -117,28 +121,36 @@ export async function callStageLlm(request: CallStageRequest): Promise<StageLlmR
         ok: false,
         code,
         message: code === 'LLM_UNAUTHORIZED' ? '真实 LLM 鉴权失败。' : code === 'LLM_RATE_LIMITED' ? '真实 LLM 当前限流。' : '真实 LLM 上游暂不可用。',
-        retryable: code !== 'LLM_UNAUTHORIZED',
+        // 仅瞬态类错误可重试；确定性失败（鉴权、参数等）重试必然再失败。
+        retryable: code === 'LLM_RATE_LIMITED' || code === 'LLM_UPSTREAM_ERROR',
       };
     }
 
     const payload = await response.json() as {
       content?: Array<{ type?: string; name?: string; input?: unknown }>;
+      stop_reason?: string;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
+    const usedTokens = { inputTokens: payload.usage?.input_tokens ?? 0, outputTokens: payload.usage?.output_tokens ?? 0 };
+    if (payload.stop_reason === 'max_tokens') {
+      // 截断时 tool JSON 必然不完整，重试同样长度的请求只会再次截断。
+      return { ok: false, code: 'LLM_TRUNCATED', message: '真实 LLM 输出被 max_tokens 截断，需调大输出上限。', retryable: false, usage: usedTokens };
+    }
     const toolUse = payload.content?.find((item) => item.type === 'tool_use' && item.name === tool.name);
-    if (!toolUse) return { ok: false, code: 'LLM_NO_TOOL', message: '模型未返回预期结构化工具结果。', retryable: true };
+    if (!toolUse) return { ok: false, code: 'LLM_NO_TOOL', message: '模型未返回预期结构化工具结果。', retryable: true, usage: usedTokens };
     const validated = validateStageToolInput(request.stage, toolUse.input);
-    if (!validated) return { ok: false, code: 'LLM_INVALID_OUTPUT', message: '模型结果未通过阶段 Schema 校验。', retryable: true };
+    if (!validated) return { ok: false, code: 'LLM_INVALID_OUTPUT', message: '模型结果未通过阶段 Schema 校验。', retryable: true, usage: usedTokens };
     return {
       ok: true,
       ...validated,
-      usage: { inputTokens: payload.usage?.input_tokens ?? 0, outputTokens: payload.usage?.output_tokens ?? 0 },
+      usage: usedTokens,
       durationMs: Math.max(1, Math.round(performance.now() - started)),
       model: request.config.model,
       imageSource: request.stage === 'verify' ? request.image?.source : undefined,
     };
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    // Node 环境下 fetch 中止抛出的 DOMException 不继承 Error，须按 name 判定。
+    if (typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError') {
       return { ok: false, code: 'LLM_TIMEOUT', message: `真实 LLM 调用超过 ${Math.round(timeoutMs / 1000)} 秒。`, retryable: true };
     }
     return { ok: false, code: 'LLM_UPSTREAM_ERROR', message: '真实 LLM 网络请求失败。', retryable: true };

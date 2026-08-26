@@ -24,8 +24,9 @@ export class MockIncidentRuntime implements IncidentRuntime {
   }
 
   async createIncident(scenarioId: string): Promise<IncidentRun> {
+    // Object.hasOwn 防止 'toString' 等原型链继承键绕过场景校验。
+    if (!Object.hasOwn(runtimeScenarios, scenarioId)) throw new Error('scenario_not_found');
     const scenario = runtimeScenarios[scenarioId];
-    if (!scenario) throw new Error('scenario_not_found');
     const run: IncidentRun = {
       id: `RUN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       scenarioId,
@@ -49,6 +50,7 @@ export class MockIncidentRuntime implements IncidentRuntime {
     if (run.status === 'needs_human') throw new Error('human_handling_required');
     if (run.status === 'completed') throw new Error('run_completed');
     if (run.currentStage !== stage) throw new Error('stage_out_of_order');
+    if (!Object.hasOwn(runtimeScenarios, run.scenarioId)) throw new Error('scenario_not_found');
 
     const execution = clone(runtimeScenarios[run.scenarioId].stages[stage]);
     run.executions[stage] = execution;

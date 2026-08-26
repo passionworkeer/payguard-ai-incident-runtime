@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LlmIncidentRuntime } from './llm-runtime';
+import { LlmIncidentRuntime, RuntimeRequestError } from './llm-runtime';
 import type { IncidentRun, StageExecution } from './types';
 
 const run = {
@@ -73,5 +73,27 @@ describe('LlmIncidentRuntime', () => {
     } finally {
       global.fetch = originalFetch;
     }
+  });
+
+  it('rejects 200 responses whose payload is not a run instead of swallowing them', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('<html>gateway health page</html>', { status: 200 }));
+    const runtime = new LlmIncidentRuntime('/api/runtime', fetcher);
+
+    const error = await runtime.createIncident('gateway-timeout').catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RuntimeRequestError);
+    expect(error).toMatchObject({ code: 'invalid_response', retryable: false });
+  });
+
+  it('times out hung requests instead of locking the UI forever', async () => {
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+    const runtime = new LlmIncidentRuntime('/api/runtime', fetcher as never, 20);
+
+    const error = await runtime.createIncident('gateway-timeout').catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(RuntimeRequestError);
+    expect(error).toMatchObject({ code: 'timeout', retryable: true });
   });
 });
