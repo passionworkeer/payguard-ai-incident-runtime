@@ -12,7 +12,8 @@
 - 可审计结果：每一步均保留输入、工具轨迹、决策因子、结构化输出、门槛、指标、风险和降级策略。
 - 流程分析：包含全链路漏斗、桑基图、阶段 P50/P95/SLA、工具使用率与触达行为漏斗。
 - 效果评测：包含 Precision、Recall、F1、Top-K、Grounding、混淆矩阵、实验对比与 Bad Case 回流。
-- 双运行时边界：默认使用确定性的 Mock Runtime；同一套 UI 可注入 HTTP Runtime 对接真实后端。
+- 双运行时：默认使用确定性的 Mock Runtime；可在页面显式切换到真实多模态 LLM Runtime，六阶段全部由真实模型驱动。
+- 多模态核验：真实模式下智能核验向模型发送合成监控截图（支持上传替换），其余阶段消费结构化前序输出。
 - 本地恢复：Mock 进度写入 `localStorage`，刷新后继续；重置后从智能核验重新开始。
 
 ## 本地运行
@@ -24,7 +25,22 @@ npm install
 npm run dev -- --port 3002
 ```
 
-打开 [http://localhost:3002](http://localhost:3002)。本项目不需要云端发布、账号或 API Key。
+打开 [http://localhost:3002](http://localhost:3002)。Mock 路径不需要任何 API Key。
+
+### 启用真实 LLM 模式（可选）
+
+在项目根目录创建 `.env.local`（已被 Git 忽略）：
+
+```text
+key=<你的 API Key>
+url=<HTTPS Base URL，Anthropic Messages 兼容>
+model=<多模态模型名>
+```
+
+- 三个变量齐全且 `url` 为合法 HTTPS 地址时，页面顶部「真实 LLM」入口才可点击；`/api/runtime/config` 只暴露 `configured`、Provider 和脱敏模型名，不会泄露 Key。
+- 真实模式下所有 LLM 调用都发生在服务端（`app/api/runtime/command`），浏览器不接触密钥。
+- 未配置或配置缺失时 Mock 演示不受影响。
+- 真实失败不会用 Mock 结果替代：当前步骤保留可原地重试，也可一键切回 Mock。
 
 质量检查：
 
@@ -55,27 +71,27 @@ npm run build
 GuidedIncidentDemo
         │
         ▼
-IncidentRuntime
+IncidentRuntime（types.ts 契约，二选一切换）
    ├─ MockIncidentRuntime  → 确定性场景 + localStorage
-   └─ HttpIncidentRuntime  → 真实事故与工具服务
+   └─ LlmIncidentRuntime   → /api/runtime/command（服务端编排真实 LLM）
+                                   └─ ServerIncidentOrchestrator → callStageLlm（Anthropic 兼容多模态）
 ```
 
-`IncidentRuntime` 定义在 `lib/runtime/types.ts`。HTTP 适配器默认约定：
+`IncidentRuntime` 定义在 `lib/runtime/types.ts`。真实路径的服务端接口：
 
-| 方法 | 路径 | 返回 |
+| 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/incidents` | `IncidentRun` |
-| `GET` | `/api/incidents/:runId` | `IncidentRun` |
-| `POST` | `/api/incidents/:runId/stages/:stage` | `{ run, execution }` |
-| `POST` | `/api/incidents/:runId/actions/:actionId/approve` | `IncidentRun` |
-| `POST` | `/api/incidents/:runId/actions/:actionId/reject` | `IncidentRun` |
-| `POST` | `/api/incidents/:runId/reset` | `IncidentRun` |
+| `GET` | `/api/runtime/config` | 安全配置状态（`configured` / Provider / 脱敏模型名） |
+| `POST` | `/api/runtime/command` | 统一命令端点：`create` / `execute` / `approve` / `reject` / `get` / `reset` |
 
-服务端错误可返回 `{ "code": "upstream_timeout", "message": "工具超时" }`。适配器会把 408、429 和 5xx 标记为可重试错误。HTTP Run 不会写入浏览器本地存储。
+- 商户触达在两种模式下都必须人工审批；解析方差（模型输出轻微超出 Schema 数量约束）会自动截断收敛，偶发不可解析时服务端原样重试一次真实调用。
+- 错误响应只包含安全错误码、用户可读消息和 `retryable`，不透传请求头、密钥或上游正文。
+- 内置合成监控截图为 `public/mock/merchant-monitor.png`，可由 `node scripts/generate-monitor-png.mjs` 重新生成（纯合成数据）。
 
 ## 目录重点
 
-- `lib/runtime/`：运行时契约、黄金场景、状态机、持久化、HTTP 适配器和评测样本转换。
-- `components/demo/`：逐步处置控制器、六步导航、执行工作区与产品设计面板。
+- `lib/runtime/`：运行时契约、黄金场景、状态机、持久化、HTTP 适配器、多模态 Client、六阶段 Schema 与服务端编排。
+- `components/demo/`：逐步处置控制器、六步导航、执行工作区、模式切换与核验图片控件。
 - `components/AnalyticsViews.tsx`：漏斗、桑基图、延迟、工具和评测图表。
-- `docs/demo-script.md`：3–5 分钟逐步讲解脚本。
+- `scripts/generate-monitor-png.mjs`：内置合成监控截图生成脚本。
+- `docs/demo-script.md`：Mock / 真实双路线讲解脚本。

@@ -53,7 +53,7 @@ describe('LlmIncidentRuntime', () => {
   it('uses the default fetcher safely in browsers where fetch rejects wrong receivers', async () => {
     const originalFetch = global.fetch;
     // 模拟浏览器 fetch：this 为非法 receiver 时抛 Illegal invocation。
-    global.fetch = function (this: unknown, _input: RequestInfo | URL, _init?: RequestInit) {
+    global.fetch = function (this: unknown) {
       if (this != null && this !== globalThis) {
         return Promise.reject(new TypeError("Failed to execute 'fetch': Illegal invocation"));
       }
