@@ -45,7 +45,7 @@ export default function Dashboard() {
           <button className="icon-button sidebar-close" type="button" onClick={() => setSidebarOpen(false)} aria-label="关闭导航"><X size={18} /></button>
         </div>
 
-        <div className="environment-pill"><span className="live-dot" />Mock 可运行环境</div>
+        <div className="environment-pill"><span className="live-dot" />示例数据环境</div>
         <nav aria-label="主导航">
           <span className="nav-heading">AI 保障工作台</span>
           {navItems.map((item) => {
@@ -72,7 +72,7 @@ export default function Dashboard() {
           <div className="model-card-head"><span><BrainCircuit size={15} /> 当前编排</span><span className={`status-dot ${runtimeMode === 'llm' ? 'warning' : 'success'}`} /></div>
           <strong>Evidence Agent</strong>
           <p>RAG · Tool Calling · 人工审批</p>
-          <div className="model-meta"><span>运行模式</span><b>{runtimeMode === 'llm' ? 'REAL LLM' : 'DETERMINISTIC'}</b></div>
+          <div className="model-meta"><span>运行模式</span><b>{runtimeMode === 'llm' ? '真实模型' : '示例数据'}</b></div>
         </div>
       </aside>
 
@@ -87,7 +87,7 @@ export default function Dashboard() {
               <h1>商户故障 AI 处置台</h1>
             </div>
           </div>
-          <div className={runtimeMode === 'llm' ? 'runtime-mode runtime-mode-real' : 'runtime-mode'}><span className="live-dot" /><div><strong>{runtimeMode === 'llm' ? 'REAL LLM RUNTIME' : 'MOCK RUNTIME'}</strong><small>{runtimeMode === 'llm' ? '真实多模态模型执行' : '本地确定性执行'}</small></div></div>
+          <div className={runtimeMode === 'llm' ? 'runtime-mode runtime-mode-real' : 'runtime-mode'}><span className="live-dot" /><div><strong>{runtimeMode === 'llm' ? '真实模型调用' : '示例数据演示'}</strong><small>{runtimeMode === 'llm' ? '真实多模态模型执行' : '本地确定性执行'}</small></div></div>
         </header>
 
         <div className={`content-wrap ${activeView === 'demo' ? 'demo-content-wrap' : ''}`}>

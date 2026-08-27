@@ -9,7 +9,23 @@ const stageNames: Record<IncidentStage, string> = {
   evaluate: '评测回流',
 };
 
-export function StepRail({
+export { stageNames };
+
+// 进度条上每段的状态：决定圆点配色 + 文案。空状态/审批/转人工 各自独立，便于一眼定位当前卡点。
+type StepIndicatorState = 'pending' | 'current' | 'complete' | 'pending_approval' | 'needs_human';
+
+function statusForStage(run: IncidentRun, stage: IncidentStage): StepIndicatorState {
+  const executed = Boolean(run.executions[stage]);
+  const completed = run.completedStages.includes(stage);
+  if (run.status === 'awaiting_approval' && run.currentStage === stage) return 'pending_approval';
+  if (run.status === 'needs_human' && run.currentStage === stage) return 'needs_human';
+  if (completed) return 'complete';
+  if (run.currentStage === stage && run.status === 'running') return 'current';
+  if (executed) return 'complete';
+  return 'pending';
+}
+
+export function StepProgress({
   run,
   selectedStage,
   onSelect,
@@ -19,40 +35,31 @@ export function StepRail({
   onSelect: (stage: IncidentStage) => void;
 }) {
   return (
-    <nav className="demo-step-rail" aria-label="处置流程">
-      <div className="step-rail-heading">
-        <span>END-TO-END RUN</span>
-        <strong>{run.completedStages.length} / 6 步已执行</strong>
-      </div>
-      <ol>
-        {stageOrder.map((stage, index) => {
-          const completed = run.completedStages.includes(stage);
-          const executed = Boolean(run.executions[stage]);
-          const approval = stage === 'contact' && run.status === 'awaiting_approval';
-          const human = stage === 'contact' && run.status === 'needs_human';
-          const current = run.currentStage === stage && !approval && !human;
-          const status = approval ? '待审批' : human ? '已转人工' : completed ? '已完成' : current ? '当前步骤' : '待执行';
-          const selectable = executed;
-          return (
-            <li key={stage} className={`${selectedStage === stage ? 'is-selected' : ''} ${completed ? 'is-complete' : ''}`}>
-              <button
-                type="button"
-                disabled={!selectable}
-                onClick={() => onSelect(stage)}
-                aria-label={`${stageNames[stage]}，${status}`}
-              >
-                <span className="step-index">{completed ? '✓' : String(index + 1).padStart(2, '0')}</span>
-                <span className="step-copy">
-                  <strong>{stageNames[stage]}</strong>
-                  <small>{status}</small>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+    <nav className="demo-progress" aria-label="处置进度">
+      {stageOrder.map((stage, index) => {
+        const state = statusForStage(run, stage);
+        const executed = state !== 'pending';
+        const isCurrent = selectedStage === stage;
+        const labelClass = `demo-progress-step ${state !== 'pending' && isCurrent ? 'is-current' : ''} is-${state.replace('_', '-')}`;
+        const dotSymbol = state === 'complete' ? '✓' : state === 'pending_approval' ? '!' : state === 'needs_human' ? '⏸' : String(index + 1);
+        const statusText = state === 'complete' ? '已完成' : state === 'current' ? '当前步骤' : state === 'pending_approval' ? '待审批' : state === 'needs_human' ? '已转人工' : '待执行';
+        return (
+          <span key={stage} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <button
+              type="button"
+              className={labelClass}
+              disabled={!executed}
+              onClick={() => onSelect(stage)}
+              aria-label={`${stageNames[stage]}，${statusText}`}
+              aria-pressed={isCurrent}
+            >
+              <span className="demo-progress-dot" aria-hidden="true">{dotSymbol}</span>
+              <span>{stageNames[stage]}</span>
+            </button>
+            {index < stageOrder.length - 1 ? <span className="demo-progress-divider" aria-hidden="true">→</span> : null}
+          </span>
+        );
+      })}
     </nav>
   );
 }
-
-export { stageNames };

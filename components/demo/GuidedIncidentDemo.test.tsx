@@ -31,7 +31,7 @@ describe('GuidedIncidentDemo', () => {
     override async executeStage(runId: string, stage: IncidentStage) {
       if (this.executeFailures > 0) {
         this.executeFailures -= 1;
-        throw new Error('真实 LLM 上游暂不可用。');
+        throw new Error('真实模型上游暂不可用。');
       }
       const result = await super.executeStage(runId, stage);
       const execution = {
@@ -59,7 +59,9 @@ describe('GuidedIncidentDemo', () => {
   }
 
   async function switchToLlm(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(await screen.findByRole('button', { name: '真实 LLM' }));
+    // 真实模式入口在右上角 ⚙ 浮层里：先开浮层，再选模式。
+    await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
+    await user.click(await screen.findByRole('button', { name: '真实模型' }));
     expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
   }
 
@@ -74,7 +76,6 @@ describe('GuidedIncidentDemo', () => {
     expect(await screen.findByRole('heading', { name: '智能核验结果' })).toBeVisible();
     expect(screen.getByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
     expect(screen.queryByText('商户 API 网关连接池耗尽')).not.toBeInTheDocument();
-    expect(screen.getByText('1 / 6 步已执行')).toBeVisible();
   });
 
   it('requires explicit approval before escalation', async () => {
@@ -98,13 +99,12 @@ describe('GuidedIncidentDemo', () => {
 
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
     await user.click(await screen.findByRole('button', { name: '下一步：进入定位分析' }));
-    await user.click(await screen.findByRole('button', { name: '下一步：生成商户触达方案' }));
-    await user.click(await screen.findByRole('button', { name: '转人工处理' }));
+    await user.click(await screen.getByRole('button', { name: '下一步：生成商户触达方案' }));
+    await user.click(screen.getByRole('button', { name: '转人工处理' }));
 
     // 终态可见：状态文本、步骤轨、人工处理 chip；主执行按钮不再出现。
-    expect(await screen.findByText('已转人工处理')).toBeVisible();
+    expect(await screen.findByText(/已转人工处理/)).toBeVisible();
     expect(screen.getByRole('button', { name: '商户触达，已转人工' })).toBeVisible();
-    expect(screen.getByText('⏸ 已转人工 · 流程暂停，可重置演示重新开始')).toBeVisible();
     expect(screen.queryByRole('button', { name: /下一步|批准并发送|转人工处理/ })).not.toBeInTheDocument();
 
     // 重置后回到第一步，可重新开始完整演示。
@@ -116,16 +116,17 @@ describe('GuidedIncidentDemo', () => {
   it('surfaces LLM initialization failures with a path back to Mock', async () => {
     class CreateFailsRuntime extends FakeLlmRuntime {
       override async createIncident(): Promise<IncidentRun> {
-        throw new Error('真实 LLM 网络请求失败。');
+        throw new Error('真实模型网络请求失败。');
       }
     }
     const user = userEvent.setup();
     renderDemo({ llmRuntime: new CreateFailsRuntime() });
 
-    await user.click(await screen.findByRole('button', { name: '真实 LLM' }));
+    await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
+    await user.click(await screen.findByRole('button', { name: '真实模型' }));
 
-    expect(await screen.findByText(/初始化失败：真实 LLM 网络请求失败。/)).toBeVisible();
-    const backToMock = await screen.findByRole('button', { name: '切回 Mock 演示' });
+    expect(await screen.findByText(/初始化失败：真实模型网络请求失败。/)).toBeVisible();
+    const backToMock = await screen.findByRole('button', { name: '切回示例数据' });
     await user.click(backToMock);
 
     expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
@@ -137,11 +138,10 @@ describe('GuidedIncidentDemo', () => {
     render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} persist={false} />);
 
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
-    await user.click(await screen.findByRole('button', { name: '下一步：进入定位分析' }));
+    await user.click(await screen.getByRole('button', { name: '下一步：进入定位分析' }));
     await user.click(screen.getByRole('button', { name: /智能核验，已完成/ }));
 
     expect(screen.getByRole('heading', { name: '智能核验结果' })).toBeVisible();
-    expect(screen.getByText('2 / 6 步已执行')).toBeVisible();
   });
 
   it('rehydrates the saved mock run after a page refresh', async () => {
@@ -153,8 +153,7 @@ describe('GuidedIncidentDemo', () => {
 
     render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} />);
 
-    expect(await screen.findByText('1 / 6 步已执行')).toBeVisible();
-    expect(screen.getByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
     localStorage.clear();
   });
 
@@ -162,11 +161,13 @@ describe('GuidedIncidentDemo', () => {
     const user = userEvent.setup();
     const { llmRuntime } = renderDemo();
 
-    expect(await screen.findByRole('button', { name: 'Mock 演示' })).toHaveAttribute('aria-pressed', 'true');
+    // 默认模式：示例数据（不显示真实模型横幅）
+    expect(screen.queryByText('REAL LLM MODE')).not.toBeInTheDocument();
     await switchToLlm(user);
 
-    expect(screen.getByText('multimodal-model')).toBeVisible();
-    expect(screen.getByText('内置合成监控截图')).toBeVisible();
+    expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(0);
+    // 真实模型横幅包含内置截图说明
+    expect(await screen.findByText('内置合成监控截图')).toBeVisible();
     expect(llmRuntime.image).toMatchObject({ source: 'built_in', data: 'iVBORw0KGgo=' });
   });
 
@@ -201,9 +202,12 @@ describe('GuidedIncidentDemo', () => {
         return { configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true };
       }
     }
+    const user = userEvent.setup();
     renderDemo({ llmRuntime: new UnconfiguredRuntime() });
 
-    expect(await screen.findByRole('button', { name: '真实 LLM' })).toBeDisabled();
+    // 浮层打开后真实模型按钮被禁用并提示未配置
+    await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
+    expect(await screen.findByRole('button', { name: '真实模型' })).toBeDisabled();
     expect(screen.getByText('检查 .env.local 中的 key / url / model')).toBeVisible();
   });
 
@@ -216,12 +220,12 @@ describe('GuidedIncidentDemo', () => {
 
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
-    expect(await screen.findByText('执行异常：真实 LLM 上游暂不可用。')).toBeVisible();
+    expect(await screen.findByText('执行异常：真实模型上游暂不可用。')).toBeVisible();
     expect(screen.getByRole('button', { name: '重试：执行智能核验' })).toBeVisible();
 
-    await user.click(await screen.findByRole('button', { name: '切回 Mock 演示' }));
+    await user.click(screen.getByRole('button', { name: '切回示例数据' }));
 
-    expect(await screen.findByRole('button', { name: 'Mock 演示' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
     expect(screen.queryByText(/执行异常/)).toBeNull();
     await user.click(screen.getByRole('button', { name: '开始演示：执行智能核验' }));
     expect(await screen.findByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
@@ -234,8 +238,7 @@ describe('GuidedIncidentDemo', () => {
 
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
-    expect(await screen.findByText('REAL LLM')).toBeVisible();
-    expect(screen.getByText('图片来源：内置截图')).toBeVisible();
+    expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
     expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(1);
     expect(screen.getByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
     expect(screen.queryByText('定位分析结果')).toBeNull();

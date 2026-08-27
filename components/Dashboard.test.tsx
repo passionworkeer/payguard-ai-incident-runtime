@@ -14,8 +14,8 @@ describe('PayGuard dashboard', () => {
     }
   });
 
-  it('labels all numbers as synthetic demo data', async () => {
+  it('does not show the legacy synthetic-data banner', async () => {
     render(<Dashboard />);
-    expect(await screen.findByText('全量合成演示数据')).toBeVisible();
+    expect(screen.queryByText('全量合成演示数据')).not.toBeInTheDocument();
   });
 });

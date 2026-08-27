@@ -1,27 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState, type ReactElement } from 'react';
 import type { IncidentRun, IncidentStage, StageExecution } from '../../lib/runtime/types';
 import { stageNames } from './StepRail';
 
-function renderValue(value: unknown) {
-  if (Array.isArray(value)) return value.join('、');
-  if (typeof value === 'boolean') return value ? '是' : '否';
-  if (typeof value === 'object' && value !== null) return JSON.stringify(value);
-  return String(value);
+type DetailSection = 'tools' | 'json';
+
+function evidenceLine(execution: StageExecution): { label: string; value: string }[] {
+  return execution.decisionFactors.map((factor) => ({ label: factor.label, value: factor.value }));
 }
 
-function DataGrid({ data }: { data: Record<string, unknown> }) {
-  return (
-    <dl className="structured-grid">
-      {Object.entries(data).map(([key, value]) => (
-        <div key={key}>
-          <dt>{key}</dt>
-          <dd>{renderValue(value)}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+// 把每个阶段的 output 折叠成「一句话结论」：让招聘方一眼抓住结果，证据 / 工具 / JSON 收进折叠区。
+function headlineFor(stage: IncidentStage, execution: StageExecution): { lead: string; sub?: string } {
+  const out = execution.output as Record<string, unknown>;
+  switch (stage) {
+    case 'verify': {
+      const confirmed = out.isIncident === true;
+      const severity = String(out.severity ?? '');
+      return {
+        lead: confirmed ? `真实 ${severity} 故障，置信度 ${execution.metrics.confidence}%` : '未识别为真实故障',
+        sub: typeof out.affectedScope === 'string' ? out.affectedScope : undefined,
+      };
+    }
+    case 'locate':
+      return { lead: typeof out.topCause === 'string' ? `Top-1 根因：${out.topCause}` : '根因待定', sub: typeof out.recommendedAction === 'string' ? out.recommendedAction : undefined };
+    case 'contact':
+      return { lead: '商户触达内容已生成', sub: typeof out.subject === 'string' ? out.subject : undefined };
+    case 'escalate': {
+      const teams = Array.isArray(out.teams) ? out.teams.join(' + ') : '';
+      return { lead: teams ? `升级至 ${teams}` : '升级方案已生成', sub: typeof out.sla === 'string' ? `SLA ${out.sla}` : undefined };
+    }
+    case 'recover': {
+      const recovered = out.recovered === true;
+      return { lead: recovered ? '已稳定恢复，可以关闭事故' : '暂未稳定，继续观察', sub: typeof out.observationAdvice === 'string' ? out.observationAdvice : undefined };
+    }
+    case 'evaluate':
+      return { lead: '评测样本已沉淀', sub: typeof out.sampleId === 'string' ? `样本 ${out.sampleId}` : undefined };
+  }
 }
 
 export function StageWorkspace({
@@ -33,82 +48,91 @@ export function StageWorkspace({
   stage: IncidentStage;
   execution?: StageExecution;
 }) {
-  const [mode, setMode] = useState<'summary' | 'json'>('summary');
-  const heading = execution ? `${stageNames[stage]}结果` : `${stageNames[stage]}准备`;
+  const [openSection, setOpenSection] = useState<DetailSection | null>(null);
+
+  if (!execution) {
+    const pendingHeadline: { lead: string; sub?: string } =
+      stage === 'verify'
+        ? { lead: '准备核验告警与监控截图', sub: '判断是否为真实故障并识别影响等级' }
+        : { lead: `准备进入${stageNames[stage]}`, sub: '执行当前步骤前不会输出结论。' };
+    return (
+      <article className="demo-step-card">
+        <div className="demo-step-meta">STEP {stageOrderIndex(stage)} · {stageNames[stage]}<h2 className="demo-step-result">{stageNames[stage]}结果</h2></div>
+        <h3 className="demo-headline">{pendingHeadline.lead}</h3>
+        {pendingHeadline.sub ? <p className="demo-why">{pendingHeadline.sub}</p> : null}
+        <div className="demo-evidence"><span className="demo-evidence-label">商户</span><span className="demo-evidence-chip">{run.incident.merchant}</span><span className="demo-evidence-chip">{run.incident.impact}</span><span className="demo-evidence-chip">{run.incident.detectedAt}</span></div>
+      </article>
+    );
+  }
+
+  const { lead, sub } = headlineFor(stage, execution);
+  const chips = evidenceLine(execution);
+  const contactMessage = typeof (execution.output as Record<string, unknown>).message === 'string' ? String((execution.output as Record<string, unknown>).message) : null;
+  const contactActions = Array.isArray((execution.output as Record<string, unknown>).actionLink) ? (execution.output as Record<string, unknown>).actionLink as string[] : null;
+  const toolEvents = execution.events.filter((event) => event.type !== 'stage_started');
+  const showJson = openSection === 'json';
+  const showTools = openSection === 'tools';
 
   return (
-    <section className="stage-workspace" aria-live="polite">
-      <header className="workspace-heading">
-        <div>
-          <span>STEP WORKSPACE · {stage.toUpperCase()}</span>
-          <h2>{heading}</h2>
-          <p>{execution?.goal ?? '点击主操作后，系统仅执行当前步骤，并保留完整可审计记录。'}</p>
+    <article className={`demo-step-card ${stage === 'contact' && run.status === 'awaiting_approval' ? 'is-pending-approval' : ''}`}>
+      <div className="demo-step-meta">
+        STEP {stageOrderIndex(stage)} · {stageNames[stage]}
+        <h2 className="demo-step-result">{stageNames[stage]}结果</h2>
+        <span className="demo-step-provider">
+          {execution.provider === 'real_llm' ? (
+            <>
+              <span className="provider-badge real">REAL LLM</span>
+              {execution.model ? <span className="demo-step-model">{execution.model}</span> : null}
+              {execution.imageSource ? <span className="demo-step-image">图片来源：{execution.imageSource === 'uploaded' ? '上传图片' : '内置截图'}</span> : null}
+            </>
+          ) : null}
+        </span>
+      </div>
+      <h3 className="demo-headline">{lead}{execution.metrics.confidence !== undefined ? <span className="demo-confidence">置信度 {execution.metrics.confidence}%</span> : null}</h3>
+      <p className="demo-why">{execution.goal}</p>
+      {sub ? <p className="demo-step-sub">{sub}</p> : null}
+
+      {chips.length > 0 ? (
+        <div className="demo-evidence">
+          <span className="demo-evidence-label">证据</span>
+          {chips.map((chip, i) => (
+            <span key={i} className="demo-evidence-chip"><span>{chip.label}</span><b>{chip.value}</b></span>
+          ))}
         </div>
-        {execution && (
-          <div className="workspace-heading-meta">
-            <div className="provider-chips">
-              {execution.provider === 'real_llm' ? (
-                <>
-                  <span className="provider-badge real">REAL LLM</span>
-                  {execution.model && <span>{execution.model}</span>}
-                  {execution.imageSource && <span>图片来源：{execution.imageSource === 'uploaded' ? '上传图片' : '内置截图'}</span>}
-                </>
-              ) : (
-                <span className="provider-badge mock">MOCK</span>
-              )}
-            </div>
-            <strong className="confidence-chip">置信度 {execution.metrics.confidence}%</strong>
-          </div>
-        )}
-      </header>
+      ) : null}
 
-      <section className="workspace-block">
-        <div className="block-title"><span>01</span><h3>业务输入与证据</h3></div>
-        {execution ? <DataGrid data={execution.input} /> : (
-          <DataGrid data={{ 商户: run.incident.merchant, 告警: run.incident.title, 等级: run.incident.severity, 影响: run.incident.impact, 发现时间: run.incident.detectedAt }} />
-        )}
-      </section>
+      {stage === 'contact' && contactMessage ? (
+        <div className="demo-contact-preview">
+          <strong className="demo-contact-subject">{typeof (execution.output as Record<string, unknown>).subject === 'string' ? String((execution.output as Record<string, unknown>).subject) : '触达预览'}</strong>
+          <p className="demo-contact-message">{contactMessage}</p>
+          {contactActions ? (
+            <div className="demo-contact-actions">{contactActions.map((action, i) => <span key={i} className="demo-contact-action">· {action}</span>)}</div>
+          ) : null}
+        </div>
+      ) : null}
 
-      <section className="workspace-block">
-        <div className="block-title"><span>02</span><h3>Agent 工具轨迹</h3></div>
-        {execution ? (
-          <ol className="tool-timeline">
-            {execution.events.filter((event) => event.type !== 'stage_started').map((event) => (
-              <li key={event.id}>
-                <span className="timeline-state">{event.type === 'approval_required' ? '!' : '✓'}</span>
-                <div><strong>{event.label}</strong><p>{event.detail}</p></div>
-                {event.durationMs !== undefined && <time>{event.durationMs} ms</time>}
-              </li>
-            ))}
-          </ol>
-        ) : <p className="empty-copy">尚未调用工具。执行后将逐项显示工具、耗时和返回摘要。</p>}
-      </section>
-
-      {execution && (
-        <>
-          <section className="workspace-block">
-            <div className="block-title"><span>03</span><h3>可审计决策依据</h3></div>
-            <div className="decision-factor-list">
-              {execution.decisionFactors.map((factor) => (
-                <article key={factor.label}>
-                  <span>{factor.label}</span><strong>{factor.value}</strong><small>{factor.evidence}</small>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="workspace-block output-block">
-            <div className="block-title block-title-with-tabs">
-              <div><span>04</span><h3>结构化输出</h3></div>
-              <div className="output-tabs" role="group" aria-label="输出格式">
-                <button type="button" className={mode === 'summary' ? 'active' : ''} onClick={() => setMode('summary')}>摘要</button>
-                <button type="button" className={mode === 'json' ? 'active' : ''} onClick={() => setMode('json')}>JSON</button>
-              </div>
-            </div>
-            {mode === 'summary' ? <DataGrid data={execution.output} /> : <pre>{JSON.stringify(execution.output, null, 2)}</pre>}
-          </section>
-        </>
-      )}
-    </section>
+      <div className="demo-tools-inline">
+        <button type="button" className="demo-tools-inline-toggle" aria-expanded={showTools} onClick={() => setOpenSection(showTools ? null : 'tools')}>
+          工具轨迹（{toolEvents.length}）
+        </button>
+        {showTools ? (
+          <span className="demo-tools-inline-stream">
+            {toolEvents.reduce<ReactElement[]>((acc, event, i) => acc.concat(
+              i === 0
+                ? [<span key={event.id}><b>{event.label}</b>{event.durationMs !== undefined ? `${event.durationMs}ms` : ''}</span>]
+                : [<Fragment key={`sep-${event.id}`}> · </Fragment>, <span key={event.id}><b>{event.label}</b>{event.durationMs !== undefined ? `${event.durationMs}ms` : ''}</span>],
+            ), [])}
+          </span>
+        ) : null}
+        <button type="button" className="demo-tools-inline-toggle" aria-expanded={showJson} onClick={() => setOpenSection(showJson ? null : 'json')}>
+          原始 JSON
+        </button>
+      </div>
+      {showJson ? <pre className="demo-json">{JSON.stringify(execution.output, null, 2)}</pre> : null}
+    </article>
   );
+}
+
+function stageOrderIndex(stage: IncidentStage): number {
+  return ['verify', 'locate', 'contact', 'escalate', 'recover', 'evaluate'].indexOf(stage) + 1;
 }
