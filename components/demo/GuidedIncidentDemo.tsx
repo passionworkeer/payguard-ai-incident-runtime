@@ -48,7 +48,8 @@ export default function GuidedIncidentDemo({
   onRunChange?: (run: IncidentRun) => void;
 }) {
   const [ownedRuntime] = useState(() => runtime ?? new MockIncidentRuntime());
-  const [mode, setMode] = useState<DemoRuntimeMode>('mock');
+  // 入口优先真实模型：有 llmRuntime 就默认真实模式；配置解析出「未配置」时再自动回退（见下方 config effect）。
+  const [mode, setMode] = useState<DemoRuntimeMode>(llmRuntime ? 'llm' : 'mock');
   const [llmConfig, setLlmConfig] = useState<PublicLlmConfig | null>(null);
   const [verifyImage, setVerifyImage] = useState<StageImage | null>(initialLlmImage ?? null);
   const [imageMeta, setImageMeta] = useState<VerifyImageMeta | null>(initialLlmImage ? builtInImageMeta : null);
@@ -80,13 +81,16 @@ export default function GuidedIncidentDemo({
   useEffect(() => {
     if (!llmRuntime) return;
     let active = true;
-    void llmRuntime.getPublicConfig()
-      .then((config) => {
-        if (active) setLlmConfig(config);
-      })
-      .catch(() => {
-        if (active) setLlmConfig({ configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true });
-      });
+    const resolve = (config: PublicLlmConfig) => {
+      if (!active) return;
+      setLlmConfig(config);
+      // 默认真实模式但服务端未配置：静默回退示例数据（此时无人工进度可丢，不走 switchMode 的确认弹窗）。
+      if (!config.configured) setMode((current) => (current === 'llm' ? 'mock' : current));
+    };
+    void llmRuntime
+      .getPublicConfig()
+      .then(resolve)
+      .catch(() => resolve({ configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true }));
     return () => {
       active = false;
     };
@@ -97,6 +101,11 @@ export default function GuidedIncidentDemo({
     setImageMeta(meta);
     if (image) llmRuntime?.setVerifyImage(image);
   }, [llmRuntime]);
+
+  // 默认即真实模式时没有 switchMode 的时机把 initialLlmImage 推给 runtime，这里统一兜底同步。
+  useEffect(() => {
+    if (llmRuntime && verifyImage) llmRuntime.setVerifyImage(verifyImage);
+  }, [llmRuntime, verifyImage]);
 
   useEffect(() => {
     if (mode !== 'llm' || !llmRuntime || verifyImage) return;
@@ -150,6 +159,10 @@ export default function GuidedIncidentDemo({
   const expectedRunMode = mode === 'llm' ? 'llm' : 'mock';
   const runMatchesMode = run?.mode === expectedRunMode;
   const showImageInput = mode === 'llm' && (!run || !runMatchesMode || run.currentStage === 'verify');
+  // 未配置真实模型：配置解析完成后已在 effect 里自动回退，这里给出可见解释而不是只把按钮禁用。
+  const unconfiguredNotice = llmRuntime && llmConfig?.configured === false ? (
+    <p className="demo-fallback-notice" role="status">真实模型未配置（检查 .env.local 中的 key / url / model），已自动切换示例数据。</p>
+  ) : null;
 
   const modeCorner = llmRuntime ? (
     <div className="demo-mode-corner" ref={popoverRef}>
@@ -196,6 +209,7 @@ export default function GuidedIncidentDemo({
     return (
       <div className="guided-demo" aria-busy={demo.busy}>
         {modeCorner}
+        {unconfiguredNotice}
         <div className="demo-loading" aria-live="polite">
           {mode === 'llm' ? '正在创建真实模型 Run…' : '正在装载演示场景…'}
           {demo.error ? <p className="demo-loading-error">初始化失败：{demo.error}</p> : null}
@@ -227,10 +241,27 @@ export default function GuidedIncidentDemo({
         <h1 className="demo-incident-title">{run.incident.title}</h1>
         <span className="demo-incident-meta">{run.incident.merchant} · <b>{run.incident.impact}</b> · {run.incident.detectedAt}</span>
       </header>
+      {unconfiguredNotice}
 
       <StepProgress run={run} selectedStage={demo.selectedStage} onSelect={demo.selectHistory} />
 
       <StageWorkspace run={run} stage={demo.selectedStage} execution={execution} />
+
+      {(() => {
+        const executedCount = Object.keys(run.executions).length;
+        if (executedCount === 0) return null;
+        const costEstimated = Object.values(run.executions).some((item) => item.costEstimated);
+        return (
+          <div className="demo-totals" aria-label="全链路累计指标">
+            <span>已执行 <b>{executedCount}/6</b> 步</span>
+            <span>总耗时 <b>{demo.totals.latencyMs >= 1000 ? `${(demo.totals.latencyMs / 1000).toFixed(1)}s` : `${demo.totals.latencyMs}ms`}</b></span>
+            {demo.totals.tokens > 0 ? <span>tokens <b>{demo.totals.tokens.toLocaleString('zh-CN')}</b></span> : null}
+            {demo.totals.costYuan > 0 ? <span>成本 <b>¥{demo.totals.costYuan.toFixed(2)}{costEstimated ? '（估）' : ''}</b></span> : null}
+            <span>工具调用 <b>{demo.totals.toolCalls}</b> 次</span>
+            <span>证据 <b>{demo.totals.evidence}</b> 条</span>
+          </div>
+        );
+      })()}
 
       <div className="demo-cta-row">
         <button type="button" className="demo-cta-secondary" onClick={demo.reset} disabled={demo.busy}>重置演示</button>

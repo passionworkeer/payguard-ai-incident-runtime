@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
@@ -58,11 +58,9 @@ describe('GuidedIncidentDemo', () => {
     return { llmRuntime, view };
   }
 
-  async function switchToLlm(user: ReturnType<typeof userEvent.setup>) {
-    // 真实模式入口在右上角 ⚙ 浮层里：先开浮层，再选模式。
+  async function openSettings(user: ReturnType<typeof userEvent.setup>) {
+    // 真实模式入口在右上角 ⚙ 浮层里：先开浮层再操作模式/图片。
     await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
-    await user.click(await screen.findByRole('button', { name: '真实模型' }));
-    expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
   }
 
   it('advances exactly one stage for each click and hides future output', async () => {
@@ -122,9 +120,7 @@ describe('GuidedIncidentDemo', () => {
     const user = userEvent.setup();
     renderDemo({ llmRuntime: new CreateFailsRuntime() });
 
-    await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
-    await user.click(await screen.findByRole('button', { name: '真实模型' }));
-
+    // 默认即真实模型：挂载后直接初始化，无需手动切换即触发失败路径。
     expect(await screen.findByText(/初始化失败：真实模型网络请求失败。/)).toBeVisible();
     const backToMock = await screen.findByRole('button', { name: '切回示例数据' });
     await user.click(backToMock);
@@ -157,24 +153,28 @@ describe('GuidedIncidentDemo', () => {
     localStorage.clear();
   });
 
-  it('keeps Mock as default and can switch to configured real LLM mode', async () => {
+  it('defaults to real LLM mode when configured and can switch to sample data', async () => {
     const user = userEvent.setup();
     const { llmRuntime } = renderDemo();
 
-    // 默认模式：示例数据（不显示真实模型横幅）
-    expect(screen.queryByText('REAL LLM MODE')).not.toBeInTheDocument();
-    await switchToLlm(user);
-
-    expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(0);
-    // 真实模型横幅包含内置截图说明
-    expect(await screen.findByText('内置合成监控截图')).toBeVisible();
+    // 入口默认真实模型：REAL LLM MODE 角标可见，内置截图自动就绪。
+    expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
     expect(llmRuntime.image).toMatchObject({ source: 'built_in', data: 'iVBORw0KGgo=' });
+    await openSettings(user);
+    expect(await screen.findByText('内置合成监控截图')).toBeVisible();
+    expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(0);
+
+    // 无进度时一键切回示例数据，无需确认弹窗。
+    await user.click(screen.getByRole('button', { name: '示例数据' }));
+    expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
+    expect(screen.queryByText('REAL LLM MODE')).not.toBeInTheDocument();
   });
 
   it('accepts an uploaded image for real multimodal verification', async () => {
     const user = userEvent.setup();
     const { llmRuntime } = renderDemo();
-    await switchToLlm(user);
+    await screen.findByText('REAL LLM MODE');
+    await openSettings(user);
     const file = new File(['image-bytes'], 'merchant-monitor.png', { type: 'image/png' });
 
     await user.upload(screen.getByLabelText('替换核验图片'), file);
@@ -186,7 +186,8 @@ describe('GuidedIncidentDemo', () => {
   it('restores the built-in image after replacing it with an upload', async () => {
     const user = userEvent.setup();
     const { llmRuntime } = renderDemo();
-    await switchToLlm(user);
+    await screen.findByText('REAL LLM MODE');
+    await openSettings(user);
     await user.upload(screen.getByLabelText('替换核验图片'), new File(['image-bytes'], 'custom.png', { type: 'image/png' }));
     expect(await screen.findByText('custom.png')).toBeVisible();
 
@@ -196,7 +197,7 @@ describe('GuidedIncidentDemo', () => {
     expect(llmRuntime.image).toMatchObject({ source: 'built_in', data: 'iVBORw0KGgo=' });
   });
 
-  it('disables the real LLM entry before configuration', async () => {
+  it('disables the real LLM entry before configuration and falls back to sample data', async () => {
     class UnconfiguredRuntime extends FakeLlmRuntime {
       override async getPublicConfig(): Promise<PublicLlmConfig> {
         return { configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true };
@@ -205,9 +206,16 @@ describe('GuidedIncidentDemo', () => {
     const user = userEvent.setup();
     renderDemo({ llmRuntime: new UnconfiguredRuntime() });
 
+    // 未配置：自动回退示例数据并给出可见提示，演示仍可用。
+    // 提示节点会随 loading ↔ 主分支切换被替换，用 waitFor 轮询重新查询而不是持有旧节点。
+    await waitFor(() => {
+      expect(screen.getByText(/已自动切换示例数据/)).toBeVisible();
+    });
+    expect(await screen.findByRole('button', { name: '开始演示：执行智能核验' })).toBeVisible();
+
     // 浮层打开后真实模型按钮被禁用并提示未配置
-    await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
-    expect(await screen.findByRole('button', { name: '真实模型' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: '运行模式设置' }));
+    expect(screen.getByRole('button', { name: '真实模型' })).toBeDisabled();
     expect(screen.getByText('检查 .env.local 中的 key / url / model')).toBeVisible();
   });
 
@@ -216,8 +224,8 @@ describe('GuidedIncidentDemo', () => {
     const llmRuntime = new FakeLlmRuntime();
     llmRuntime.executeFailures = 1;
     renderDemo({ llmRuntime });
-    await switchToLlm(user);
 
+    // 默认真实模型，直接执行第一步触发真实失败。
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
     expect(await screen.findByText('执行异常：真实模型上游暂不可用。')).toBeVisible();
@@ -234,7 +242,6 @@ describe('GuidedIncidentDemo', () => {
   it('marks real stages with provider badges and still hides future output', async () => {
     const user = userEvent.setup();
     renderDemo();
-    await switchToLlm(user);
 
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
