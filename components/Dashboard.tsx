@@ -99,9 +99,9 @@ export default function Dashboard() {
             <IncidentsView onStartDemo={() => setActiveView('demo')} />
           ) : activeView === 'flow' ? (
             <FlowAnalyticsView />
-          ) : (
+          ) : activeView === 'evaluation' ? (
             <EvaluationView sample={evaluationSample} />
-          )}
+          ) : null}
         </div>
       </section>
     </main>

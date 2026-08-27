@@ -6,8 +6,8 @@ import { useState } from 'react';
 import type { EvaluationSample } from '../lib/runtime/evaluation';
 import EChart from './EChart';
 
-const axis = { axisLine: { lineStyle: { color: '#24404d' } }, axisLabel: { color: '#8aa4b0', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(143,174,194,.07)' } } };
-const tooltip = { backgroundColor: '#10232e', borderColor: '#294653', textStyle: { color: '#dcebf0', fontSize: 10 } };
+const axis = { axisLine: { lineStyle: { color: '#c9d3e4' } }, axisLabel: { color: '#66738c', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(220,227,239,.6)' } } };
+const tooltip = { backgroundColor: '#ffffff', borderColor: '#dce3ef', textStyle: { color: '#111d36', fontSize: 10 } };
 
 const funnel = [
   { name: '原始告警', value: 12847 }, { name: '候选事件', value: 3982 }, { name: '真实故障', value: 2194 },
@@ -15,9 +15,9 @@ const funnel = [
 ];
 
 const funnelOption: EChartsOption = {
-  color: ['#315b72', '#2b7187', '#2a91a6', '#2eb1c2', '#35c6c5', '#45d59c'],
+  color: ['#b9c8e4', '#9fb6e8', '#7d9cf2', '#5b82f7', '#3f70fa', '#0e9c6f'],
   tooltip: { ...tooltip, trigger: 'item', formatter: '{b}<br/>{c} 起 · {d}%' },
-  series: [{ type: 'funnel', left: '8%', top: 14, bottom: 12, width: '84%', minSize: '28%', maxSize: '100%', sort: 'descending', gap: 4, label: { color: '#c5d8df', fontSize: 9, formatter: '{b}  {c}' }, labelLine: { length: 8, lineStyle: { color: '#466675' } }, itemStyle: { borderColor: '#0d1a25', borderWidth: 2, borderRadius: 3 }, data: funnel }],
+  series: [{ type: 'funnel', left: '8%', top: 14, bottom: 12, width: '84%', minSize: '28%', maxSize: '100%', sort: 'descending', gap: 4, label: { color: '#43516b', fontSize: 9, formatter: '{b}  {c}' }, labelLine: { length: 8, lineStyle: { color: '#b6c1d4' } }, itemStyle: { borderColor: '#ffffff', borderWidth: 2, borderRadius: 3 }, data: funnel }],
 };
 
 const sankeyNodes = ['监控阈值', '异常检测', '商户反馈', '真实故障', '误报降噪', '接口超时', '签名错误', '流量限流', '商户触达', '内部升级', '自动恢复', '人工恢复'].map((name) => ({ name }));
@@ -28,14 +28,14 @@ const sankeyLinks = [
 ].map(([source,target,value]) => ({ source: String(source), target: String(target), value: Number(value) }));
 
 const sankeyOption: EChartsOption = {
-  color: ['#45687b','#427f91','#4b7388','#31c8df','#5b7381','#ff7b72','#f6b84d','#9b8afb','#3fbfa0','#4f8cff','#45d59c','#d58558'],
+  color: ['#8d9ab2', '#7d9cf2', '#12a9c0', '#0e9c6f', '#5d6a82', '#d95c4a', '#e07a1f', '#7c5cd6', '#3fbfa0', '#4f8cff', '#66738c', '#d58558'],
   tooltip: { ...tooltip, trigger: 'item' },
-  series: [{ type: 'sankey', left: 10, right: 18, top: 16, bottom: 16, nodeWidth: 10, nodeGap: 10, draggable: false, emphasis: { focus: 'adjacency' }, label: { color: '#9eb6c0', fontSize: 9 }, lineStyle: { color: 'gradient', opacity: .34, curveness: .48 }, data: sankeyNodes, links: sankeyLinks }],
+  series: [{ type: 'sankey', left: 10, right: 18, top: 16, bottom: 16, nodeWidth: 10, nodeGap: 10, draggable: false, emphasis: { focus: 'adjacency' }, label: { color: '#43516b', fontSize: 9 }, lineStyle: { color: 'gradient', opacity: .34, curveness: .48 }, data: sankeyNodes, links: sankeyLinks }],
 };
 
 const latencyOption: EChartsOption = {
-  color: ['#31c8df', '#9b8afb', '#f6b84d'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 8, textStyle: { color: '#8fa9b5', fontSize: 9 } },
-  grid: { left: 38, right: 14, top: 32, bottom: 25 }, xAxis: { type: 'category', data: ['核验','定位','触达','升级','恢复'], ...axis }, yAxis: { type: 'value', name: '秒', nameTextStyle: { color: '#7f99a6', fontSize: 8 }, ...axis },
+  color: ['#175cff', '#7c5cd6', '#e07a1f'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 8, textStyle: { color: '#66738c', fontSize: 9 } },
+  grid: { left: 38, right: 14, top: 32, bottom: 25 }, xAxis: { type: 'category', data: ['核验','定位','触达','升级','恢复'], ...axis }, yAxis: { type: 'value', name: '秒', nameTextStyle: { color: '#8b96aa', fontSize: 8 }, ...axis },
   series: [
     { name: 'P50', type: 'bar', barMaxWidth: 14, data: [1.24,4.38,.98,.46,1.86], itemStyle: { borderRadius: [3,3,0,0] } },
     { name: 'P95', type: 'bar', barMaxWidth: 14, data: [2.86,8.92,2.14,1.12,4.26], itemStyle: { borderRadius: [3,3,0,0] } },
@@ -44,17 +44,17 @@ const latencyOption: EChartsOption = {
 };
 
 const toolOption: EChartsOption = {
-  color: ['#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { right: 8, top: 0, textStyle: { color: '#8fa9b5', fontSize: 9 } }, grid: { left: 88, right: 34, top: 30, bottom: 18 },
+  color: ['#175cff','#0e9c6f'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { right: 8, top: 0, textStyle: { color: '#66738c', fontSize: 9 } }, grid: { left: 88, right: 34, top: 30, bottom: 18 },
   xAxis: [
     { type: 'value', ...axis },
-    { type: 'value', min: 90, max: 100, position: 'top', axisLabel: { formatter: '{value}%', color: '#8aa4b0', fontSize: 8 }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#24404d' } } },
+    { type: 'value', min: 90, max: 100, position: 'top', axisLabel: { formatter: '{value}%', color: '#66738c', fontSize: 8 }, splitLine: { show: false }, axisLine: { lineStyle: { color: '#c9d3e4' } } },
   ], yAxis: { type: 'category', data: ['Message','Ticket','Merchant Profile','Case RAG','Logs','Metrics'], ...axis },
   series: [{ name: '调用量', type: 'bar', data: [1522,672,2194,1876,3510,5892], barMaxWidth: 10, itemStyle: { borderRadius: [0,4,4,0] } }, { name: '成功率', type: 'line', xAxisIndex: 1, data: [98,99,99,94,97,99], symbolSize: 5 }],
 };
 
 const channelOption: EChartsOption = {
-  color: ['#315b72','#2b7187','#2a91a6','#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'item' },
-  series: [{ type: 'funnel', left: '8%', top: 18, bottom: 14, width: '84%', minSize: '34%', maxSize: '100%', gap: 3, label: { color: '#a8bdc9', fontSize: 9, formatter: '{b}  {c}' }, itemStyle: { borderColor: '#0d1a25', borderWidth: 2 }, data: [{name:'发送',value:1648},{name:'送达',value:1522},{name:'打开',value:1184},{name:'点击',value:986},{name:'回复',value:542}] }],
+  color: ['#b9c8e4','#9fb6e8','#7d9cf2','#5b82f7','#0e9c6f'], tooltip: { ...tooltip, trigger: 'item' },
+  series: [{ type: 'funnel', left: '8%', top: 18, bottom: 14, width: '84%', minSize: '34%', maxSize: '100%', gap: 3, label: { color: '#43516b', fontSize: 9, formatter: '{b}  {c}' }, itemStyle: { borderColor: '#ffffff', borderWidth: 2 }, data: [{name:'发送',value:1648},{name:'送达',value:1522},{name:'打开',value:1184},{name:'点击',value:986},{name:'回复',value:542}] }],
 };
 
 function ViewHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
@@ -99,16 +99,16 @@ export function FlowAnalyticsView() {
 }
 
 const experimentOption: EChartsOption = {
-  color: ['#546d7a','#4f8cff','#31c8df','#45d59c'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 6, textStyle: { color: '#8fa9b5', fontSize: 9 } }, grid: { left: 44, right: 12, top: 36, bottom: 24 },
-  xAxis: { type: 'category', data: ['核验 Recall','根因 Top-1','Evidence','自动处置'], ...axis }, yAxis: { type: 'value', min: 50, max: 100, axisLabel: { formatter: '{value}%', color: '#668493', fontSize: 9 }, splitLine: axis.splitLine },
+  color: ['#8d9ab2','#93b0ff','#5b82f7','#0e9c6f'], tooltip: { ...tooltip, trigger: 'axis' }, legend: { top: 0, right: 6, textStyle: { color: '#66738c', fontSize: 9 } }, grid: { left: 44, right: 12, top: 36, bottom: 24 },
+  xAxis: { type: 'category', data: ['核验 Recall','根因 Top-1','Evidence','自动处置'], ...axis }, yAxis: { type: 'value', min: 50, max: 100, axisLabel: { formatter: '{value}%', color: '#66738c', fontSize: 9 }, splitLine: axis.splitLine },
   series: [
     { name:'规则基线',type:'bar',data:[82.1,58.4,51.2,46.8] }, { name:'RAG Agent',type:'bar',data:[91.5,76.8,84.7,65.2] }, { name:'Evidence v3.3',type:'bar',data:[96.9,84.2,93.5,74.1] }, { name:'Evidence v3.4',type:'bar',data:[98.7,86.9,96.8,78.4], itemStyle:{ borderRadius:[3,3,0,0] } },
   ],
 };
 
 const severityOption: EChartsOption = {
-  color: ['#ff6b6b','#f6b84d','#31c8df'], tooltip: { ...tooltip, trigger:'axis' }, grid:{left:40,right:15,top:20,bottom:25}, xAxis:{type:'category',data:['P0','P1','P2'],...axis}, yAxis:{type:'value',min:90,max:100,axisLabel:{formatter:'{value}%',color:'#668493',fontSize:9},splitLine:axis.splitLine},
-  series:[{type:'bar',barMaxWidth:30,data:[98.7,96.4,94.8],itemStyle:{borderRadius:[4,4,0,0]},markLine:{silent:true,symbol:'none',lineStyle:{color:'#f6b84d',type:'dashed'},label:{formatter:'P0 目标 99%',color:'#9a8158',fontSize:8},data:[{yAxis:99}]}}],
+  color: ['#d95c4a','#e07a1f','#175cff'], tooltip: { ...tooltip, trigger:'axis' }, grid:{left:40,right:15,top:20,bottom:25}, xAxis:{type:'category',data:['P0','P1','P2'],...axis}, yAxis:{type:'value',min:90,max:100,axisLabel:{formatter:'{value}%',color:'#66738c',fontSize:9},splitLine:axis.splitLine},
+  series:[{type:'bar',barMaxWidth:30,data:[98.7,96.4,94.8],itemStyle:{borderRadius:[4,4,0,0]},markLine:{silent:true,symbol:'none',lineStyle:{color:'#e07a1f',type:'dashed'},label:{formatter:'P0 目标 99%',color:'#9a6a2a',fontSize:8},data:[{yAxis:99}]}}],
 };
 
 const badCases = [
