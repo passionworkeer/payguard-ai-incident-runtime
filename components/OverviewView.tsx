@@ -1,16 +1,16 @@
 'use client';
 
 import type { EChartsOption } from 'echarts';
-import { AlertTriangle, CheckCircle2, CircleSlash, Filter, ShieldAlert, Sparkles, Target } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CircleSlash, Filter, Target } from 'lucide-react';
 import { kpiMetrics } from '../lib/mock-data';
 import { alertFeed, metricTimeline, mttrBreakdown } from '../lib/overview-data';
 import { ViewHeader, overviewAxis, overviewTooltip } from './AnalyticsViews';
 import EChart from './EChart';
 
-const tierTitle: Record<NonNullable<(typeof kpiMetrics)[number]['tier']>, { eyebrow: string; title: string; description: string; icon: typeof Sparkles }> = {
-  north_star: { eyebrow: 'TIER · NORTH STAR', title: '北极星指标', description: '战略对齐卡，所有运营动作的最终判据。', icon: Sparkles },
-  primary: { eyebrow: 'TIER · PRIMARY', title: '一级指标', description: '日常运营盯的转化 / 触达 / 检出；驱动 ROI 提升。', icon: Target },
-  guardrail: { eyebrow: 'TIER · GUARDRAIL', title: '护栏指标', description: '防止自动化过头 / 漏掉关键事故；任何一项越线立即回滚。', icon: ShieldAlert },
+const tierTitle: Record<NonNullable<(typeof kpiMetrics)[number]['tier']>, { eyebrow: string; title: string; description: string }> = {
+  north_star: { eyebrow: 'TIER · NORTH STAR', title: '北极星指标', description: '战略对齐卡，所有运营动作的最终判据。' },
+  primary: { eyebrow: 'TIER · PRIMARY', title: '一级指标', description: '日常运营盯的转化 / 触达 / 检出；驱动 ROI 提升。' },
+  guardrail: { eyebrow: 'TIER · GUARDRAIL', title: '护栏指标', description: '防止自动化过头 / 漏掉关键事故；任何一项越线立即回滚。' },
 };
 
 // metricTimeline 总耗时求和（19 段检测 + 28 段回顾），靠 30 个点直接渲染。
@@ -116,7 +116,6 @@ function KpiTile({ metric }: { metric: (typeof kpiMetrics)[number] }) {
   return (
     <article className={`metric-card ${toneClass}`}>
       <div className="metric-card-head">
-        <span className="metric-icon"><Sparkles size={14} /></span>
         <span className="metric-delta">{metric.delta}</span>
       </div>
       <span className="metric-label">{metric.label}</span>
@@ -138,10 +137,9 @@ export default function OverviewView() {
         const metrics = kpiMetrics.filter((metric) => metric.tier === tier);
         if (metrics.length === 0) return null;
         const meta = tierTitle[tier];
-        const Icon = meta.icon;
         return (
           <section className={`overview-tier overview-tier-${tier}`} key={tier}>
-            <header className="overview-tier-head"><Icon size={15} /><span>{meta.eyebrow}</span><h3>{meta.title}</h3><em>{meta.description}</em></header>
+            <header className="overview-tier-head"><span>{meta.eyebrow}</span><h3>{meta.title}</h3><em>{meta.description}</em></header>
             <div className="kpi-grid">
               {metrics.map((metric) => <KpiTile key={metric.id} metric={metric} />)}
             </div>
@@ -151,7 +149,7 @@ export default function OverviewView() {
 
       <section className="overview-charts">
         <article className="panel overview-panel">
-          <header className="panel-head"><div><Sparkles size={14} /><span>MTTR 分解</span></div><small>合计 {mttrTotal}m · 与北极星卡口径自洽</small></header>
+          <header className="panel-head"><div><span>MTTR 分解</span></div><small>合计 {mttrTotal}m · 与北极星卡口径自洽</small></header>
           <EChart option={mttrOption} summary="MTTR 各阶段耗时堆叠条" className="overview-chart-mttr" />
         </article>
         <article className="panel overview-panel">
