@@ -219,3 +219,15 @@ export const gatewayTimeoutScenario: RuntimeScenario = {
 export const runtimeScenarios: Record<string, RuntimeScenario> = {
   [gatewayTimeoutScenario.id]: gatewayTimeoutScenario,
 };
+
+// 取本次 attempt 对应的阶段 fixture：首轮用 stages，重入按 retryStages 顺序取，超界复用最后一个。
+export function resolveStageFixture(
+  scenario: RuntimeScenario,
+  stage: IncidentStage,
+  attempt: number,
+): StageExecution {
+  if (attempt <= 1) return scenario.stages[stage];
+  const retries = scenario.retryStages?.[stage];
+  if (!retries || retries.length === 0) return scenario.stages[stage];
+  return retries[Math.min(attempt - 2, retries.length - 1)];
+}

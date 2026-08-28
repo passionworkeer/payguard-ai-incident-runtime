@@ -1,6 +1,6 @@
-import { runtimeScenarios } from './scenario';
+import { resolveStageFixture, runtimeScenarios } from './scenario';
+import { advanceRun, nextAttempt, recordExecution } from './state-machine';
 import {
-  stageOrder,
   type IncidentRun,
   type IncidentRuntime,
   type IncidentStage,
@@ -52,8 +52,12 @@ export class MockIncidentRuntime implements IncidentRuntime {
     if (run.currentStage !== stage) throw new Error('stage_out_of_order');
     if (!Object.hasOwn(runtimeScenarios, run.scenarioId)) throw new Error('scenario_not_found');
 
-    const execution = clone(runtimeScenarios[run.scenarioId].stages[stage]);
-    run.executions[stage] = execution;
+    const scenario = runtimeScenarios[run.scenarioId];
+    const execution = clone(resolveStageFixture(scenario, stage, nextAttempt(run, stage)));
+    // 集中打标而不改 24 处 fixture：驱动 MOCK 徽标与成本「（估）」文案。
+    execution.provider = 'mock';
+    execution.costEstimated = true;
+    recordExecution(run, stage, execution);
     run.status = 'running';
 
     if (stage === 'contact') {
@@ -64,7 +68,7 @@ export class MockIncidentRuntime implements IncidentRuntime {
         label: '批准商户触达内容',
       };
     } else {
-      this.completeStage(run, stage);
+      advanceRun(run, stage);
     }
 
     return { run: clone(run), execution };
@@ -76,7 +80,7 @@ export class MockIncidentRuntime implements IncidentRuntime {
       throw new Error('approval_not_found');
     }
     run.pendingApproval = undefined;
-    this.completeStage(run, 'contact');
+    advanceRun(run, 'contact');
     return clone(run);
   }
 
@@ -109,18 +113,5 @@ export class MockIncidentRuntime implements IncidentRuntime {
     const run = this.runs.get(runId);
     if (!run) throw new Error('run_not_found');
     return run;
-  }
-
-  private completeStage(run: IncidentRun, stage: IncidentStage) {
-    if (!run.completedStages.includes(stage)) run.completedStages.push(stage);
-    const index = stageOrder.indexOf(stage);
-    const next = stageOrder[index + 1];
-    if (!next) {
-      run.status = 'completed';
-      run.currentStage = 'evaluate';
-      return;
-    }
-    run.status = 'running';
-    run.currentStage = next;
   }
 }

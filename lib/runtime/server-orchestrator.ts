@@ -1,7 +1,8 @@
 import { callStageLlm, type LlmErrorCode, type StageImage, type StageLlmResult } from './llm-client';
 import { readLlmConfig } from './llm-config';
-import { runtimeScenarios } from './scenario';
-import { stageOrder, type IncidentRun, type IncidentRuntime, type IncidentStage, type StageExecution } from './types';
+import { resolveStageFixture, runtimeScenarios } from './scenario';
+import { advanceRun, nextAttempt, recordExecution } from './state-machine';
+import { type IncidentRun, type IncidentRuntime, type IncidentStage, type StageExecution } from './types';
 
 type LlmCaller = (request: Parameters<typeof callStageLlm>[0]) => Promise<StageLlmResult>;
 
@@ -74,7 +75,8 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
     if (run.status === 'completed') throw new Error('run_completed');
     if (run.currentStage !== stage) throw new Error('stage_out_of_order');
 
-    const fixture = runtimeScenarios[run.scenarioId].stages[stage];
+    const attempt = nextAttempt(run, stage);
+    const fixture = resolveStageFixture(runtimeScenarios[run.scenarioId], stage, attempt);
     const priorOutputs = Object.fromEntries(
       run.completedStages.map((completed) => [completed, run.executions[completed]?.output]),
     );
@@ -87,7 +89,10 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
         incident: run.incident,
         stageInput: fixture.input,
         priorOutputs,
-        approval: stageOrder.indexOf(stage) > stageOrder.indexOf('contact') ? 'approved' : undefined,
+        // 只有 contact 真正走完审批才声明 approved：误报短路直达 evaluate 时不得谎称已审批。
+        approval: run.completedStages.includes('contact') ? 'approved' : undefined,
+        // 重入时带上次结论：让模型基于新观测窗口重新判断，而不是复述旧结论。
+        ...(attempt > 1 ? { attempt, previousAttempt: run.executions[stage]?.output } : {}),
       },
       image,
     } as const;
@@ -131,14 +136,14 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       imageSource: result.imageSource,
       costEstimated: false,
     };
-    run.executions[stage] = execution;
+    recordExecution(run, stage, execution);
     run.status = 'running';
 
     if (stage === 'contact') {
       run.status = 'awaiting_approval';
       run.pendingApproval = { id: `${run.id}-contact-approval`, stage: 'contact', label: '批准真实 LLM 商户触达内容' };
     } else {
-      this.completeStage(run, stage);
+      advanceRun(run, stage);
     }
     return { run: clone(run), execution: clone(execution) };
   }
@@ -151,7 +156,7 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
     const run = this.requireRun(runId);
     if (run.status !== 'awaiting_approval' || run.pendingApproval?.id !== actionId) throw new Error('approval_not_found');
     run.pendingApproval = undefined;
-    this.completeStage(run, 'contact');
+    advanceRun(run, 'contact');
     return clone(run);
   }
 
@@ -195,17 +200,5 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
     const run = this.runs.get(runId);
     if (!run) throw new Error('run_not_found');
     return run;
-  }
-
-  private completeStage(run: IncidentRun, stage: IncidentStage) {
-    if (!run.completedStages.includes(stage)) run.completedStages.push(stage);
-    const next = stageOrder[stageOrder.indexOf(stage) + 1];
-    if (!next) {
-      run.status = 'completed';
-      run.currentStage = 'evaluate';
-      return;
-    }
-    run.status = 'running';
-    run.currentStage = next;
   }
 }

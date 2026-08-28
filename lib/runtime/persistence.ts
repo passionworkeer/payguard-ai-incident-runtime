@@ -48,13 +48,24 @@ function isIncidentRun(value: unknown): value is IncidentRun {
   if (!Object.values(value.executions).every(isStageExecution)) return false;
   if (value.pendingApproval !== undefined && !(isRecord(value.pendingApproval) && typeof value.pendingApproval.id === 'string')) return false;
   if (value.humanReason !== undefined && typeof value.humanReason !== 'string') return false;
+  // v2 分支字段：缺省合法（线性路径不写），存在时校验形状。
+  if (value.attempts !== undefined && !(Array.isArray(value.attempts) && value.attempts.every(isStageExecution))) return false;
+  if (value.stageAttempts !== undefined) {
+    if (!isRecord(value.stageAttempts)) return false;
+    const entries = Object.entries(value.stageAttempts);
+    if (!entries.every(([stage, count]) => stageOrder.includes(stage as IncidentRun['currentStage']) && typeof count === 'number' && Number.isInteger(count) && count > 0)) return false;
+  }
+  if (value.skippedStages !== undefined && !(Array.isArray(value.skippedStages) && value.skippedStages.every((stage) => stageOrder.includes(stage as IncidentRun['currentStage'])))) return false;
   return true;
 }
 
 // 存储“尽力而为”：配额满 / 存储被禁用时不抛错，避免打断演示主流程。
+// version 2：增加分支字段（attempts/stageAttempts/skippedStages），v1 旧记录直接拒收清除。
+const STORAGE_VERSION = 2;
+
 export function saveMockRun(storage: Storage, run: IncidentRun) {
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, run }));
+    storage.setItem(STORAGE_KEY, JSON.stringify({ version: STORAGE_VERSION, run }));
   } catch {
     /* 忽略写入失败：刷新后会回到上一个成功持久化的阶段 */
   }
@@ -70,7 +81,7 @@ export function loadMockRun(storage: Storage): IncidentRun | null {
   if (!raw) return null;
   try {
     const stored: unknown = JSON.parse(raw);
-    if (!isRecord(stored) || stored.version !== 1 || !isIncidentRun(stored.run)) {
+    if (!isRecord(stored) || stored.version !== STORAGE_VERSION || !isIncidentRun(stored.run)) {
       throw new Error('invalid_mock_run');
     }
     // 归一化 mode：历史数据可能缺省该字段，统一补齐为 mock。

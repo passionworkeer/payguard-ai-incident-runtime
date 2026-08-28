@@ -24,12 +24,12 @@ describe('mock run persistence', () => {
     expect(restored).toMatchObject({ id: run.id, mode: 'mock', currentStage: 'locate', completedStages: ['verify'] });
   });
 
-  it('rejects and clears invalid JSON, wrong version, and llm-mode runs', async () => {
+  it('rejects and clears invalid JSON, stale v1 payloads, and llm-mode runs', async () => {
     const run = await runAtVerify();
     const cases: Array<[string, string]> = [
       ['broken json', '{bad json'],
-      ['wrong version', JSON.stringify({ version: 2, run })],
-      ['llm mode run', JSON.stringify({ version: 1, run: { ...run, mode: 'llm' } })],
+      ['stale v1 version', JSON.stringify({ version: 1, run })],
+      ['llm mode run', JSON.stringify({ version: 2, run: { ...run, mode: 'llm' } })],
     ];
     for (const [, raw] of cases) {
       localStorage.setItem(STORAGE_KEY, raw);
@@ -45,19 +45,33 @@ describe('mock run persistence', () => {
       ['metrics missing fields', { ...run, executions: { verify: { ...run.executions.verify!, metrics: { latencyMs: 100 } } } }],
       ['events not an array', { ...run, executions: { verify: { ...run.executions.verify!, events: 'nope' } } }],
       ['unknown scenario id', { ...run, scenarioId: 'toString' }],
+      ['attempts not executions', { ...run, attempts: [42] }],
+      ['stageAttempts with unknown stage', { ...run, stageAttempts: { rollback: 1 } }],
+      ['stageAttempts with zero count', { ...run, stageAttempts: { verify: 0 } }],
+      ['skippedStages with unknown stage', { ...run, skippedStages: ['rollback'] }],
     ];
     for (const [label, payload] of corrupt) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, run: payload }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, run: payload }));
       expect(loadMockRun(localStorage), label).toBeNull();
       expect(localStorage.getItem(STORAGE_KEY), label).toBeNull();
     }
+  });
+
+  it('round-trips branch fields (attempts / stageAttempts / skippedStages)', async () => {
+    const run = await runAtVerify();
+    saveMockRun(localStorage, run);
+
+    const restored = loadMockRun(localStorage);
+
+    expect(restored?.stageAttempts).toEqual({ verify: 1 });
+    expect(restored?.attempts?.map((item) => item.stage)).toEqual(['verify']);
   });
 
   it('accepts runs without a mode field and normalizes it to mock', async () => {
     const run = await runAtVerify();
     const withoutMode: Record<string, unknown> = { ...run };
     delete withoutMode.mode;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, run: withoutMode }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, run: withoutMode }));
 
     const restored = loadMockRun(localStorage);
 
