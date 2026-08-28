@@ -1,8 +1,9 @@
 'use client';
 
 import { BarChart3, BellRing, BrainCircuit, ChevronRight, FlaskConical, LayoutDashboard, Menu, Network, PlayCircle, Sparkles, X } from 'lucide-react';
-import { useCallback, useState } from 'react';
-import { createEvaluationSample, type EvaluationSample } from '../lib/runtime/evaluation';
+import { useCallback, useEffect, useState } from 'react';
+import { aggregateClassification, aggregateRootCause, createEvaluationSample, type EvaluationSample } from '../lib/runtime/evaluation';
+import { appendEvalSample, clearEvalSamples } from '../lib/runtime/eval-store';
 import { LlmIncidentRuntime } from '../lib/runtime/llm-runtime';
 import type { IncidentRun } from '../lib/runtime/types';
 import { incidentSummaries } from '../lib/mock-data';
@@ -25,21 +26,67 @@ const navItems = [
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewId>('demo');
-  const [evaluationSample, setEvaluationSample] = useState<EvaluationSample | null>(null);
+  // 本次会话实时评测样本：useEffect 读取 localStorage（不能用 useState initializer，
+  // SSR hydration 不一致会导致服务端 / 客户端首屏 mismatch）。
+  const [evalSamples, setEvalSamples] = useState<EvaluationSample[]>([]);
   const [runtimeMode, setRuntimeMode] = useState<'mock' | 'llm'>('mock');
   // 演示场景：事故中心「进入处置演示」按行跳转；切回 demo 视图时 GuidedIncidentDemo 用此初始值。
   const [demoScenario, setDemoScenario] = useState<string>('gateway-timeout');
   const [llmRuntime] = useState(() => new LlmIncidentRuntime());
 
+  useEffect(() => {
+    // 仅在浏览器侧读 localStorage；CSR 阶段执行一次即可。
+    if (typeof window === 'undefined') return;
+    try {
+      // 动态导入避免 SSR 时加载 fs/localStorage（虽然这里不会发生，但仍是好习惯）。
+      void import('../lib/runtime/eval-store').then(({ loadEvalSamples }) => {
+        setEvalSamples(loadEvalSamples(window.localStorage));
+      });
+    } catch {
+      setEvalSamples([]);
+    }
+  }, []);
+
   const handleRunChange = useCallback((run: IncidentRun) => {
     setRuntimeMode(run.mode);
     // 全链路刚跑完 → 用本次 Run 生成的样本；其余状态保留上一个样本，避免重置/继续操作把已展示的样本突然清空。
     if (run.status === 'completed') {
-      setEvaluationSample(createEvaluationSample(run));
+      try {
+        const sample = createEvaluationSample(run);
+        setEvaluationSample(sample);
+        if (typeof window !== 'undefined') {
+          // append 走 storage，再以 storage 为准同步到 state（处理 FIFO 截断 + 去重）。
+          const next = appendEvalSample(window.localStorage, sample);
+          setEvalSamples(next);
+        }
+      } catch {
+        // 样本生成失败（极少见，比如 evaluate 缺失字段）→ 不阻塞 UI。
+      }
     } else if (run.status === 'idle' && run.completedStages.length === 0) {
       setEvaluationSample(null);
     }
   }, []);
+
+  // 实时聚合指标：评测页 EvaluationView 拿到 samples 后再算；这里只负责存储。
+  const setEvaluationSample = useCallback((sample: EvaluationSample | null) => {
+    if (!sample) return;
+    setEvalSamples((current) => {
+      const withoutDup = current.filter((item) => item.runId !== sample.runId);
+      return [...withoutDup, sample];
+    });
+  }, []);
+
+  const handleClearSamples = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    clearEvalSamples(window.localStorage);
+    setEvalSamples([]);
+  }, []);
+
+  const liveMetrics = (() => {
+    const classification = aggregateClassification(evalSamples);
+    const rootCause = aggregateRootCause(evalSamples);
+    return { classification, rootCause };
+  })();
 
   return (
     <main className="dashboard-shell">
@@ -107,7 +154,7 @@ export default function Dashboard() {
           ) : activeView === 'flow' ? (
             <FlowAnalyticsView />
           ) : activeView === 'evaluation' ? (
-            <EvaluationView sample={evaluationSample} />
+            <EvaluationView samples={evalSamples} liveMetrics={liveMetrics} onClear={handleClearSamples} />
           ) : null}
         </div>
       </section>

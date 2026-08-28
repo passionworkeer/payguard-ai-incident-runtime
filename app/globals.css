@@ -275,6 +275,39 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(23, 92, 255,
 .overview-alert-feed .panel-head > div { display: flex; align-items: center; gap: 6px; }
 .overview-alert-feed .panel-head small { color: #8b96aa; font: 11px var(--font-geist-mono); font-weight: 400; }
 .overview-feed-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 14px 0; color: #8b96aa; font-size: 11px; }
+/* 本次会话实时评测面板：会话样本表 + 实时分类指标 + 混淆矩阵 + 清空按钮。 */
+.eval-session-panel { margin-bottom: 14px; }
+.eval-session-panel .chart-card-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 8px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.eval-session-panel .chart-card-head > div { display: flex; align-items: center; gap: 6px; }
+.eval-session-panel .chart-card-head small { color: #8b96aa; font: 11px var(--font-geist-mono); font-weight: 400; }
+.eval-empty { margin: 0; padding: 14px 16px 22px; color: var(--text-muted); font-size: 12px; line-height: 1.7; }
+.eval-live-metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 0 16px 14px; }
+.eval-live-metrics article { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); background: var(--panel-raised); padding: 10px 12px; }
+.eval-live-metrics small { color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.eval-live-metrics strong { color: var(--ink); font: 800 18px var(--font-geist-mono); letter-spacing: -.02em; }
+.eval-live-metrics em { color: #8b96aa; font-style: normal; font-size: 10px; }
+.eval-confusion-live { display: grid; grid-template-columns: 88px repeat(2, minmax(80px, 1fr)); gap: 8px; padding: 0 16px 16px; }
+.eval-confusion-live > em { display: grid; min-height: 64px; place-items: center; border: 1px solid var(--line); background: #f5f7fa; font: 800 18px var(--font-geist-mono); color: var(--text-secondary); }
+.eval-confusion-live > em small { display: block; margin-top: -22px; font-size: 10px; font-weight: 600; opacity: .6; }
+.eval-confusion-live .tp { border-color: #bfe3d4; background: var(--green2); color: var(--green); }
+.eval-confusion-live .tn { border-color: #b9cbff; background: var(--blue2); color: var(--blue); }
+.eval-confusion-live .fp { border-color: #f0d6b8; background: var(--orange2); color: var(--orange); }
+.eval-confusion-live .fn { border-color: #ecc0b6; background: var(--red2); color: var(--red); }
+.eval-confusion-axis { display: grid; place-items: center; color: #8b96aa; font-size: 10px; font-weight: 700; }
+.eval-confusion-axis-top { display: grid; grid-template-columns: 88px repeat(2, minmax(80px, 1fr)); }
+.eval-confusion-axis-top b { display: grid; place-items: center; padding: 0 0 6px; color: #8b96aa; font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.eval-outcome, .eval-root { display: inline-flex; align-items: center; min-height: 22px; border: 1px solid var(--line); padding: 1px 7px; font: 800 11px var(--font-geist-mono); }
+.eval-outcome-tp { border-color: #bfe3d4; background: var(--green2); color: var(--green); }
+.eval-outcome-tn { border-color: #b9cbff; background: var(--blue2); color: var(--blue); }
+.eval-outcome-fp { border-color: #f0d6b8; background: var(--orange2); color: var(--orange); }
+.eval-outcome-fn { border-color: #ecc0b6; background: var(--red2); color: var(--red); }
+.eval-root-top1 { border-color: #bfe3d4; background: var(--green2); color: var(--green); }
+.eval-root-topk { border-color: #b9cbff; background: var(--blue2); color: var(--blue); }
+.eval-root-miss { border-color: #ecc0b6; background: var(--red2); color: var(--red); }
+.eval-root-na { border-color: var(--line); background: #f5f7fa; color: #8b96aa; }
+.eval-session-actions { display: flex; align-items: center; gap: 12px; padding: 10px 16px 14px; color: #8b96aa; font-size: 11px; }
+.eval-session-actions small { font-family: var(--font-geist-mono); }
+.eval-static-baseline { margin: 4px 0 12px; color: #8b96aa; font-size: 11px; }
 /* 演示场景选择器：左侧 label + 复用 .runtime-mode-switch 按钮组。 */
 .scenario-picker { display: flex; align-items: center; gap: 10px; margin: 12px 0 14px; flex-wrap: wrap; }
 .scenario-picker-label { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; }

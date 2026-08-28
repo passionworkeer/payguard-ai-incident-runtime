@@ -3,7 +3,7 @@
 import type { EChartsOption } from 'echarts';
 import { AlertTriangle, ArrowUpRight, CheckCircle2, CircleDollarSign, Filter, MousePointerClick, Sparkles, Target, TimerReset } from 'lucide-react';
 import { useState } from 'react';
-import type { EvaluationSample } from '../lib/runtime/evaluation';
+import type { EvaluationSample, VerifyOutcome } from '../lib/runtime/evaluation';
 import EChart from './EChart';
 
 const axis = { axisLine: { lineStyle: { color: '#c9d3e4' } }, axisLabel: { color: '#66738c', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(220,227,239,.6)' } } };
@@ -124,20 +124,92 @@ const badCases = [
   ['EVAL-0816','P1','触达','排查建议未匹配商户技术等级','画像缺失','已回流'],
 ];
 
-export function EvaluationView({ sample }: { sample?: EvaluationSample | null }) {
+// 「历史演示数据（静态基线）」与「本次会话实时评测」明确隔离：前者来自 fixture，
+// 后者来自本次 Run 的真实/示例数据 ground-truth 判分。
+export interface EvaluationViewProps {
+  samples: EvaluationSample[];
+  liveMetrics: {
+    classification: { tp: number; fp: number; fn: number; tn: number; totals: number; accuracy: number; precision: number; recall: number; f1: number };
+    rootCause: { total: number; top1: number; topk: number; miss: number; hitRate: number };
+  };
+  onClear: () => void;
+}
+
+const outcomeLabel: Record<VerifyOutcome, string> = { TP: 'TP', FP: 'FP', FN: 'FN', TN: 'TN' };
+const outcomeTone: Record<VerifyOutcome, string> = { TP: 'tp', FP: 'fp', FN: 'fn', TN: 'tn' };
+
+export function EvaluationView({ samples, liveMetrics, onClear }: EvaluationViewProps) {
+  const latest = samples[samples.length - 1] ?? null;
+  const hasSession = samples.length > 0;
   return <div className="view-page">
     <ViewHeader eyebrow="AI QUALITY SYSTEM" title="智能化效果评测" description="把核验、定位、证据与动作质量产品化，形成离线回放到线上 Bad Case 的持续优化闭环。" />
-    {sample ? <article className="panel current-evaluation-sample"><div><span>本次演示样本</span><strong>{sample.sampleId}</strong></div><dl><div><dt>核验结果</dt><dd>{sample.predictedIncident ? '真实故障 / TP' : '正常'}</dd></div><div><dt>预测根因</dt><dd>{sample.predictedRootCause}</dd></div><div><dt>最终根因</dt><dd>{sample.finalRootCause}</dd></div><div><dt>人工修正</dt><dd>{sample.humanCorrected ? '是' : '否'}</dd></div></dl></article> : null}
+
+    {/* 本次会话实时评测：评测产品化、常态化的核心——每次 Run 完成即追加判分样本并聚合指标。 */}
+    <section className="panel eval-session-panel">
+      <div className="chart-card-head">
+        <div><span>SESSION LIVE EVALUATION</span><h3>本次会话实时评测</h3></div>
+        <small>样本 {samples.length} · 由本次 Run 完成时自动追加</small>
+      </div>
+      {!hasSession ? (
+        <p className="eval-empty">还没有会话样本——到「处置演示」跑完任意场景（4 个演示场景任选其一），完成即生成 1 行样本 + 实时分类指标。已完成的 Run 会在刷新页面后保留。</p>
+      ) : (
+        <>
+          <div className="eval-live-metrics">
+            <article><small>样本数</small><strong>{liveMetrics.classification.totals}</strong><em>本次会话累计</em></article>
+            <article><small>Accuracy</small><strong>{(liveMetrics.classification.accuracy * 100).toFixed(1)}%</strong><em>{(liveMetrics.classification.tp + liveMetrics.classification.tn)}/{liveMetrics.classification.totals} 正确</em></article>
+            <article><small>Precision</small><strong>{(liveMetrics.classification.precision * 100).toFixed(1)}%</strong><em>误报控制</em></article>
+            <article><small>Recall</small><strong>{(liveMetrics.classification.recall * 100).toFixed(1)}%</strong><em>真实故障不漏</em></article>
+            <article><small>F1</small><strong>{(liveMetrics.classification.f1 * 100).toFixed(1)}%</strong><em>综合</em></article>
+            <article><small>根因命中率</small><strong>{(liveMetrics.rootCause.hitRate * 100).toFixed(1)}%</strong><em>top1 {liveMetrics.rootCause.top1} · topk {liveMetrics.rootCause.topk} / {liveMetrics.rootCause.total}</em></article>
+          </div>
+          <div className="eval-confusion-live">
+            <span className="eval-confusion-axis eval-confusion-axis-top"><b>预测故障</b><b>预测正常</b></span>
+            <span className="eval-confusion-axis">真实故障</span>
+            <em className="tp">{liveMetrics.classification.tp}<small>TP</small></em>
+            <em className="fn">{liveMetrics.classification.fn}<small>FN</small></em>
+            <span className="eval-confusion-axis">真实正常</span>
+            <em className="fp">{liveMetrics.classification.fp}<small>FP</small></em>
+            <em className="tn">{liveMetrics.classification.tn}<small>TN</small></em>
+          </div>
+          <div className="incident-table-wrap">
+            <table>
+              <thead><tr><th>场景 / 模式</th><th>核验</th><th>根因命中</th><th>预测根因</th><th>Ground Truth</th><th>重试</th><th>耗时</th><th>Token</th></tr></thead>
+              <tbody>
+                {[...samples].reverse().map((sample) => (
+                  <tr key={sample.runId}>
+                    <td><strong>{sample.scenarioId}</strong><br /><small>{sample.mode === 'llm' ? `LLM · ${sample.provider}` : 'Mock'}{sample.humanCorrected ? ' · 已人工修正' : ''}</small></td>
+                    <td><span className={`eval-outcome eval-outcome-${outcomeTone[sample.verifyOutcome]}`}>{outcomeLabel[sample.verifyOutcome]}</span></td>
+                    <td><span className={`eval-root eval-root-${sample.rootCauseHit}`}>{sample.rootCauseHit === 'n/a' ? 'n/a' : sample.rootCauseHit === 'top1' ? 'Top-1' : sample.rootCauseHit === 'topk' ? 'Top-K' : 'miss'}</span></td>
+                    <td style={{ whiteSpace: 'normal', minWidth: 180 }}>{sample.predictedRootCause || '—'}</td>
+                    <td style={{ whiteSpace: 'normal', minWidth: 180 }}>{sample.groundTruthRootCause || '—'}</td>
+                    <td>{sample.retryCount}</td>
+                    <td>{(sample.totalLatencyMs / 1000).toFixed(1)}s</td>
+                    <td>{sample.tokens.toLocaleString('zh-CN')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="eval-session-actions">
+            <button type="button" className="secondary-button" onClick={onClear}>清空会话样本</button>
+            {latest ? <small>最近样本 runId：{latest.runId}</small> : null}
+          </div>
+        </>
+      )}
+    </section>
+
+    {/* 历史演示数据（静态基线）：与本次会话评测隔离，避免 PM 把历史指标误读为本次判分。 */}
+    <p className="eval-static-baseline" role="note">以下指标来自历史演示数据（静态基线 · 不可变），用于产品体验参考；上方数据才是本次会话的真实判分。</p>
     <section className="mini-metric-grid">
-      <MiniMetric icon={Target} label="核验 F1" value="94.9%" helper="Precision 91.4%" />
-      <MiniMetric icon={CheckCircle2} label="根因 Top-3" value="96.2%" helper="Top-1 86.9%" tone="green" />
+      <MiniMetric icon={Target} label="核验 F1（基线）" value="94.9%" helper="Precision 91.4%" />
+      <MiniMetric icon={CheckCircle2} label="根因 Top-3（基线）" value="96.2%" helper="Top-1 86.9%" tone="green" />
       <MiniMetric icon={Sparkles} label="Evidence Grounding" value="96.8%" helper="目标 ≥ 95%" tone="violet" />
       <MiniMetric icon={AlertTriangle} label="幻觉率" value="0.7%" helper="-0.5pp vs v3.3" tone="amber" />
     </section>
     <section className="analysis-grid evaluation-grid">
       <article className="panel chart-panel experiment-panel"><div className="chart-card-head"><div><span>EXPERIMENT COMPARISON</span><h3>模型与 Prompt 实验对比</h3></div><small>Dataset v2026.08 · 2,480 Cases</small></div><EChart option={experimentOption} summary="Evidence Agent v3.4 在四项核心指标中均领先。" /></article>
       <article className="panel chart-panel"><div className="chart-card-head"><div><span>SEVERITY RECALL</span><h3>分级故障召回率</h3></div><small>P0 目标 99%</small></div><EChart option={severityOption} summary="P0 召回率 98.7%，距离 99% 目标仍差 0.3 个百分点。" /></article>
-      <article className="panel matrix-panel"><div className="chart-card-head"><div><span>VERIFY CONFUSION MATRIX</span><h3>核验混淆矩阵</h3></div><small>Precision 91.4% · Recall 98.7%</small></div><div className="matrix"><span /><b>预测故障</b><b>预测正常</b><strong>真实故障</strong><em className="tp">1,842<small>TP</small></em><em className="fn">24<small>FN</small></em><strong>真实正常</strong><em className="fp">173<small>FP</small></em><em className="tn">441<small>TN</small></em></div></article>
+      <article className="panel matrix-panel"><div className="chart-card-head"><div><span>VERIFY CONFUSION MATRIX</span><h3>核验混淆矩阵（基线）</h3></div><small>Precision 91.4% · Recall 98.7%</small></div><div className="matrix"><span /><b>预测故障</b><b>预测正常</b><strong>真实故障</strong><em className="tp">1,842<small>TP</small></em><em className="fn">24<small>FN</small></em><strong>真实正常</strong><em className="fp">173<small>FP</small></em><em className="tn">441<small>TN</small></em></div></article>
       <article className="panel bad-case-panel"><div className="chart-card-head"><div><span>FAILURE FEEDBACK</span><h3>Bad Case 回流队列</h3></div><small>人工复核 · 每日回流</small></div><div className="incident-table-wrap"><table><thead><tr><th>Case</th><th>等级</th><th>环节</th><th>失败摘要</th><th>归因</th><th>状态</th></tr></thead><tbody>{badCases.map((row)=><tr key={row[0]}>{row.map((cell,index)=><td key={cell}>{index===0?<strong>{cell}</strong>:cell}</td>)}</tr>)}</tbody></table></div></article>
     </section>
   </div>;
