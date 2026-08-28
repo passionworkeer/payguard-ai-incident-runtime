@@ -10,6 +10,8 @@ export interface KpiMetric {
   deltaLabel: string;
   tone: Tone;
   trend: number[];
+  // 三层指标分层：north_star 北极星卡（战略指标）/ primary 一级指标（运营）/ guardrail 护栏（防回归）。
+  tier?: 'north_star' | 'primary' | 'guardrail';
 }
 
 export interface StageMetric {

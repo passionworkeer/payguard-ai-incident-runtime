@@ -9,6 +9,7 @@ import { incidentSummaries } from '../lib/mock-data';
 import { EvaluationView, FlowAnalyticsView } from './AnalyticsViews';
 import GuidedIncidentDemo from './demo/GuidedIncidentDemo';
 import IncidentsView from './IncidentsView';
+import OverviewView from './OverviewView';
 
 type ViewId = 'demo' | 'overview' | 'incidents' | 'flow' | 'evaluation';
 
@@ -102,11 +103,7 @@ export default function Dashboard() {
           {activeView === 'incidents' ? (
             <IncidentsView onStartDemo={(scenarioId) => { setDemoScenario(scenarioId); setActiveView('demo'); }} />
           ) : activeView === 'overview' ? (
-            // 运营总览页：P4 引入，先挂占位，后续 PR 补 OverviewView 渲染。
-            <div className="overview-placeholder" aria-label="运营总览">
-              <h2>运营总览</h2>
-              <p>三层指标 + MTTR 分解 + 原始告警流 + 指标时序。P4 实现中。</p>
-            </div>
+            <OverviewView />
           ) : activeView === 'flow' ? (
             <FlowAnalyticsView />
           ) : activeView === 'evaluation' ? (

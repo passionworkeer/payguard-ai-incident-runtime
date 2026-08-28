@@ -256,6 +256,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(23, 92, 255,
 .runtime-mode-switch button + button { border-left: 1px solid var(--line); }
 .runtime-mode-switch button[aria-pressed='true'] { background: var(--blue); color: #fff; font-weight: 700; }
 .runtime-mode-switch button:disabled { cursor: not-allowed; opacity: .45; }
+/* 运营总览页：三层指标区（tier）+ 三图 + 告警流。复用全站 .panel/.kpi-grid/.metric-card 等已有样式，仅新增分层标识与图容器。 */
+.overview-tier { margin-bottom: 18px; }
+.overview-tier-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--text-muted); font-size: 12px; }
+.overview-tier-head h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 800; letter-spacing: -.01em; }
+.overview-tier-head em { margin-left: auto; color: #8b96aa; font-size: 11px; font-style: normal; }
+.overview-tier-head svg { color: var(--blue); }
+.overview-tier-guardrail .overview-tier-head svg { color: var(--red); }
+.overview-tier-north_star .overview-tier-head svg { color: var(--violet); }
+.overview-charts { display: grid; grid-template-columns: 1.05fr 1.4fr 1.4fr; gap: 12px; margin-bottom: 18px; }
+.overview-panel { display: flex; flex-direction: column; min-height: 320px; }
+.overview-panel .echart-shell { flex: 1; min-height: 240px; }
+.overview-panel .panel-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 11px 14px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.overview-panel .panel-head > div { display: flex; align-items: center; gap: 6px; }
+.overview-panel .panel-head small { color: #8b96aa; font: 11px var(--font-geist-mono); font-weight: 400; }
+.overview-alert-feed { padding-bottom: 12px; }
+.overview-alert-feed .panel-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 11px 14px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.overview-alert-feed .panel-head > div { display: flex; align-items: center; gap: 6px; }
+.overview-alert-feed .panel-head small { color: #8b96aa; font: 11px var(--font-geist-mono); font-weight: 400; }
+.overview-feed-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 14px 0; color: #8b96aa; font-size: 11px; }
 /* 演示场景选择器：左侧 label + 复用 .runtime-mode-switch 按钮组。 */
 .scenario-picker { display: flex; align-items: center; gap: 10px; margin: 12px 0 14px; flex-wrap: wrap; }
 .scenario-picker-label { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; }

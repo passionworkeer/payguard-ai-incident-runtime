@@ -9,6 +9,10 @@ import EChart from './EChart';
 const axis = { axisLine: { lineStyle: { color: '#c9d3e4' } }, axisLabel: { color: '#66738c', fontSize: 9 }, splitLine: { lineStyle: { color: 'rgba(220,227,239,.6)' } } };
 const tooltip = { backgroundColor: '#ffffff', borderColor: '#dce3ef', textStyle: { color: '#111d36', fontSize: 10 } };
 
+// 导出给 OverviewView 复用：保持全站图表视觉一致（浅色纸质风格，密集单行网格）。
+export const overviewAxis = axis;
+export const overviewTooltip = tooltip;
+
 const funnel = [
   { name: '原始告警', value: 12847 }, { name: '候选事件', value: 3982 }, { name: '真实故障', value: 2194 },
   { name: '成功定位', value: 1876 }, { name: '成功触达', value: 1522 }, { name: '确认恢复', value: 1439 },
@@ -61,6 +65,8 @@ function ViewHeader({ eyebrow, title, description }: { eyebrow: string; title: s
   // 静态徽标而非按钮：这些筛选在演示数据集上是固定口径，不做假的交互反馈。
   return <div className="view-header"><div><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></div><div className="view-actions"><span className="view-chip"><Filter size={14}/>全部商户</span><span className="view-chip">近 7 日</span></div></div>;
 }
+
+export { ViewHeader };
 
 function MiniMetric({ icon: Icon, label, value, helper, tone = 'cyan' }: { icon: typeof Target; label: string; value: string; helper: string; tone?: string }) {
   return <article className={`mini-metric mini-${tone}`}><span><Icon size={16}/></span><div><small>{label}</small><strong>{value}</strong><em>{helper}</em></div></article>;

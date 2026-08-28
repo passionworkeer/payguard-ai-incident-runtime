@@ -2,7 +2,7 @@
 
 import type { EChartsOption } from 'echarts';
 import { BarChart, FunnelChart, LineChart, SankeyChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { init, use as registerECharts } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { useEffect, useRef } from 'react';
@@ -14,6 +14,9 @@ registerECharts([
   SankeyChart,
   GridComponent,
   LegendComponent,
+  // markArea/markLine 必须显式注册：未注册时 ECharts 静默丢弃对应配置，原 P0 目标线因此丢失。
+  MarkAreaComponent,
+  MarkLineComponent,
   TooltipComponent,
   CanvasRenderer,
 ]);
