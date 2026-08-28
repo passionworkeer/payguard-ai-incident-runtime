@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BellRing, BrainCircuit, ChevronRight, FlaskConical, LayoutDashboard, Menu, Network, PlayCircle, Sparkles, X } from 'lucide-react';
+import { BarChart3, BellRing, BrainCircuit, ChevronRight, FlaskConical, LayoutDashboard, Menu, Network, PlayCircle, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { aggregateClassification, aggregateRootCause, createEvaluationSample, type EvaluationSample } from '../lib/runtime/evaluation';
 import { appendEvalSample, clearEvalSamples } from '../lib/runtime/eval-store';
@@ -92,8 +92,6 @@ export default function Dashboard() {
     <main className="dashboard-shell">
       <aside className={`sidebar ${sidebarOpen ? 'is-open' : ''}`}>
         <div className="brand-block">
-          <div className="brand-mark"><Sparkles size={19} /></div>
-          <div><strong>PayGuard</strong><span>Merchant Reliability</span></div>
           <button className="icon-button sidebar-close" type="button" onClick={() => setSidebarOpen(false)} aria-label="关闭导航"><X size={18} /></button>
         </div>
 
