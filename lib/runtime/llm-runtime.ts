@@ -1,5 +1,4 @@
 import type { PublicLlmConfig } from './llm-config';
-import type { StageImage } from './llm-client';
 import type { IncidentRun, IncidentRuntime, IncidentStage, StageExecution } from './types';
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -30,18 +29,12 @@ function isAbortError(error: unknown): boolean {
 const DEFAULT_TIMEOUT_MS = 90_000;
 
 export class LlmIncidentRuntime implements IncidentRuntime {
-  private verifyImage?: StageImage;
-
   constructor(
     private readonly baseUrl = '/api/runtime',
     // 箭头包装避免把本实例当作 fetch 的 receiver（浏览器会抛 Illegal invocation）。
     private readonly fetcher: Fetcher = (input, init) => fetch(input, init),
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
   ) {}
-
-  setVerifyImage(image: StageImage) {
-    this.verifyImage = image;
-  }
 
   getPublicConfig() {
     return this.request<PublicLlmConfig>(`${this.baseUrl}/config`, { validate: (payload) => isRecord(payload) && typeof payload.configured === 'boolean' });
@@ -56,7 +49,6 @@ export class LlmIncidentRuntime implements IncidentRuntime {
       action: 'execute',
       runId,
       stage,
-      image: stage === 'verify' ? this.verifyImage : undefined,
     }, (payload) => isRecord(payload) && isRunPayload(payload.run));
   }
 

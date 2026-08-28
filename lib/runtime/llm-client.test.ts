@@ -6,7 +6,7 @@ import { stageOrder } from './types';
 const config: LlmConfig = {
   apiKey: 'secret-never-log',
   baseUrl: 'https://llm.example.test',
-  model: 'multimodal-model',
+  model: 'evidence-model',
 };
 
 const verifyToolInput = {
@@ -15,13 +15,14 @@ const verifyToolInput = {
     severity: 'P0',
     confidence: 96,
     impactScope: '支付成功率下降 28.36pp',
-    visualFindings: ['成功率断崖下降', 'P95 延迟快速抬升'],
+    evidenceHighlights: ['成功率断崖下降', 'P95 延迟快速抬升'],
+    signalSummary: '4 个内部接口工具中 3 个 flag，与历史 case 相似度 0.78',
   },
   decisionFactors: [
     { label: '成功率', value: '71.36%', evidence: 'metrics://success-rate' },
   ],
   confidence: 96,
-  summary: '监控截图与结构化指标相互印证，确认为 P0 真实故障。',
+  summary: '多源工具信号聚合后确认 P0 真实故障。',
 };
 
 function responseWithTool(input: unknown, usage = { input_tokens: 321, output_tokens: 123 }) {
@@ -31,15 +32,14 @@ function responseWithTool(input: unknown, usage = { input_tokens: 321, output_to
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
-describe('multimodal LLM client', () => {
-  it('sends the verify image and forces the stage tool call', async () => {
+describe('LLM client (evidence-driven)', () => {
+  it('forces the stage tool call and serializes the structured context as text', async () => {
     const fetcher = vi.fn().mockResolvedValue(responseWithTool(verifyToolInput));
 
     const result = await callStageLlm({
       config,
       stage: 'verify',
       context: { merchant: '星海出行', alert: '支付接口超时率突增' },
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
       fetchImpl: fetcher,
     });
 
@@ -47,10 +47,9 @@ describe('multimodal LLM client', () => {
     const [, init] = fetcher.mock.calls[0];
     const body = JSON.parse(String(init.body));
     expect(body.tool_choice).toEqual({ type: 'tool', name: 'submit_verify_result' });
-    expect(body.messages[0].content[0]).toMatchObject({
-      type: 'image',
-      source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
-    });
+    // 多模态截图已下线：messages[0].content 仅含文本上下文，不再有 image block。
+    expect(body.messages[0].content).toHaveLength(1);
+    expect(body.messages[0].content[0].type).toBe('text');
     expect(init.headers['x-api-key']).toBe(config.apiKey);
   });
 
@@ -61,7 +60,6 @@ describe('multimodal LLM client', () => {
       config,
       stage: 'verify',
       context: { merchant: '星海出行', alert: '支付接口超时率突增' },
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
       fetchImpl: fetcher,
     });
 
@@ -75,7 +73,6 @@ describe('multimodal LLM client', () => {
       config,
       stage: 'verify',
       context: { merchant: '星海出行' },
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'uploaded' },
       fetchImpl: vi.fn().mockResolvedValue(responseWithTool(verifyToolInput)),
     });
 
@@ -84,7 +81,6 @@ describe('multimodal LLM client', () => {
       output: verifyToolInput.output,
       usage: { inputTokens: 321, outputTokens: 123 },
       confidence: 96,
-      imageSource: 'uploaded',
     });
   });
 
@@ -93,7 +89,6 @@ describe('multimodal LLM client', () => {
       config,
       stage: 'verify',
       context: {},
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
       fetchImpl: vi.fn().mockResolvedValue(responseWithTool({ output: { isIncident: 'yes' } })),
     });
 
@@ -126,15 +121,6 @@ describe('multimodal LLM client', () => {
       fetchImpl: vi.fn().mockResolvedValue(new Response('denied', { status: 401 })),
     });
     expect(unauthorized).toMatchObject({ ok: false, code: 'LLM_UNAUTHORIZED', retryable: false });
-
-    const badImage = await callStageLlm({
-      config,
-      stage: 'verify',
-      context: {},
-      image: { mediaType: 'image/png', data: 'not base64!', source: 'built_in' },
-      fetchImpl: vi.fn(),
-    });
-    expect(badImage).toMatchObject({ ok: false, code: 'IMAGE_INVALID', retryable: false });
   });
 
   it('reports max_tokens truncation as a distinct non-retryable error with usage', async () => {
@@ -148,7 +134,6 @@ describe('multimodal LLM client', () => {
       config,
       stage: 'verify',
       context: {},
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
       fetchImpl: vi.fn().mockResolvedValue(truncated),
     });
 
@@ -165,7 +150,6 @@ describe('multimodal LLM client', () => {
       config,
       stage: 'verify',
       context: {},
-      image: { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' },
       fetchImpl: vi.fn().mockResolvedValue(new Response(JSON.stringify({
         content: [{ type: 'tool_use', name: 'submit_verify_result', input: { output: { isIncident: 'yes' } } }],
         usage: { input_tokens: 250, output_tokens: 90 },

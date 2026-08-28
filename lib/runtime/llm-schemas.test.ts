@@ -15,11 +15,11 @@ describe('validateStageToolInput 数量收敛', () => {
         severity: 'P0',
         confidence: 96,
         impactScope: '支付成功率下降 28.36pp',
-        visualFindings: ['成功率断崖下降'],
+        evidenceHighlights: ['成功率断崖下降'],
       },
       decisionFactors: factors,
       confidence: 96,
-      summary: '监控截图与结构化指标相互印证。',
+      summary: '多源工具信号聚合后确认 P0 真实故障。',
     });
 
     expect(validated).not.toBeNull();
@@ -52,7 +52,7 @@ describe('validateStageToolInput 数量收敛', () => {
         severity: 'P0',
         confidence: 96,
         impactScope: '影响说明',
-        visualFindings: ['成功率下降'],
+        evidenceHighlights: ['成功率下降'],
       },
       decisionFactors: [{ label: '定级', value: 'P0', evidence: 'verify.severity' }],
       confidence: 96,
@@ -65,7 +65,7 @@ describe('validateStageToolInput 数量收敛', () => {
         severity: 'S0',
         confidence: 96,
         impactScope: '影响说明',
-        visualFindings: ['成功率下降'],
+        evidenceHighlights: ['成功率下降'],
       },
       decisionFactors: [{ label: '定级', value: 'P0', evidence: 'verify.severity' }],
       confidence: '96',

@@ -2,26 +2,18 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
-import type { StageImage } from '../../lib/runtime/llm-client';
 import type { PublicLlmConfig } from '../../lib/runtime/llm-config';
 import type { IncidentRun, IncidentStage } from '../../lib/runtime/types';
 import type { ConfigurableLlmRuntime } from './GuidedIncidentDemo';
 import { saveMockRun } from '../../lib/runtime/persistence';
 import GuidedIncidentDemo from './GuidedIncidentDemo';
 
-const builtInImage: StageImage = { mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'built_in' };
-
 describe('GuidedIncidentDemo', () => {
   class FakeLlmRuntime extends MockIncidentRuntime implements ConfigurableLlmRuntime {
-    image?: StageImage;
     executeFailures = 0;
 
     async getPublicConfig(): Promise<PublicLlmConfig> {
-      return { configured: true, provider: 'anthropic-compatible', model: 'multimodal-model', multimodal: true };
-    }
-
-    setVerifyImage(image: StageImage) {
-      this.image = image;
+      return { configured: true, provider: 'anthropic-compatible', model: 'evidence-model' };
     }
 
     override async createIncident(scenarioId: string): Promise<IncidentRun> {
@@ -34,12 +26,7 @@ describe('GuidedIncidentDemo', () => {
         throw new Error('真实模型上游暂不可用。');
       }
       const result = await super.executeStage(runId, stage);
-      const execution = {
-        ...result.execution,
-        provider: 'real_llm' as const,
-        model: 'multimodal-model',
-        imageSource: stage === 'verify' ? ('built_in' as const) : undefined,
-      };
+      const execution = { ...result.execution, provider: 'real_llm' as const, model: 'evidence-model' };
       const run: IncidentRun = { ...result.run, mode: 'llm', executions: { ...result.run.executions, [stage]: execution } };
       return { run, execution };
     }
@@ -51,7 +38,6 @@ describe('GuidedIncidentDemo', () => {
       <GuidedIncidentDemo
         runtime={new MockIncidentRuntime()}
         llmRuntime={llmRuntime}
-        initialLlmImage={builtInImage}
         persist={false}
       />,
     );
@@ -59,7 +45,7 @@ describe('GuidedIncidentDemo', () => {
   }
 
   async function openSettings(user: ReturnType<typeof userEvent.setup>) {
-    // 真实模式入口在右上角 ⚙ 浮层里：先开浮层再操作模式/图片。
+    // 真实模式入口在右上角「运行模式设置」浮层里：先开浮层再操作模式开关。
     await user.click(await screen.findByRole('button', { name: '运行模式设置' }));
   }
 
@@ -155,14 +141,13 @@ describe('GuidedIncidentDemo', () => {
 
   it('defaults to real LLM mode when configured and can switch to sample data', async () => {
     const user = userEvent.setup();
-    const { llmRuntime } = renderDemo();
+    renderDemo();
 
-    // 入口默认真实模型：REAL LLM MODE 角标可见，内置截图自动就绪。
+    // 入口默认真实模型：REAL LLM MODE 角标可见，浮层里 EVIDENCE LLM 徽标同时露出。
     expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
-    expect(llmRuntime.image).toMatchObject({ source: 'built_in', data: 'iVBORw0KGgo=' });
     await openSettings(user);
-    expect(await screen.findByText('内置合成监控截图')).toBeVisible();
-    expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(0);
+    expect(await screen.findByText('EVIDENCE LLM')).toBeVisible();
+    expect(screen.getAllByText('evidence-model').length).toBeGreaterThan(0);
 
     // 无进度时一键切回示例数据，无需确认弹窗。
     await user.click(screen.getByRole('button', { name: '示例数据' }));
@@ -170,37 +155,10 @@ describe('GuidedIncidentDemo', () => {
     expect(screen.queryByText('REAL LLM MODE')).not.toBeInTheDocument();
   });
 
-  it('accepts an uploaded image for real multimodal verification', async () => {
-    const user = userEvent.setup();
-    const { llmRuntime } = renderDemo();
-    await screen.findByText('REAL LLM MODE');
-    await openSettings(user);
-    const file = new File(['image-bytes'], 'merchant-monitor.png', { type: 'image/png' });
-
-    await user.upload(screen.getByLabelText('替换核验图片'), file);
-
-    expect(await screen.findByText('merchant-monitor.png')).toBeVisible();
-    expect(llmRuntime.image).toMatchObject({ mediaType: 'image/png', source: 'uploaded' });
-  });
-
-  it('restores the built-in image after replacing it with an upload', async () => {
-    const user = userEvent.setup();
-    const { llmRuntime } = renderDemo();
-    await screen.findByText('REAL LLM MODE');
-    await openSettings(user);
-    await user.upload(screen.getByLabelText('替换核验图片'), new File(['image-bytes'], 'custom.png', { type: 'image/png' }));
-    expect(await screen.findByText('custom.png')).toBeVisible();
-
-    await user.click(screen.getByRole('button', { name: '恢复内置截图' }));
-
-    expect(await screen.findByText('内置合成监控截图')).toBeVisible();
-    expect(llmRuntime.image).toMatchObject({ source: 'built_in', data: 'iVBORw0KGgo=' });
-  });
-
   it('disables the real LLM entry before configuration and falls back to sample data', async () => {
     class UnconfiguredRuntime extends FakeLlmRuntime {
       override async getPublicConfig(): Promise<PublicLlmConfig> {
-        return { configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true };
+        return { configured: false, provider: 'anthropic-compatible', model: '未配置' };
       }
     }
     const user = userEvent.setup();
@@ -246,8 +204,20 @@ describe('GuidedIncidentDemo', () => {
     await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
 
     expect(await screen.findByText('REAL LLM MODE')).toBeVisible();
-    expect(screen.getAllByText('multimodal-model').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('evidence-model').length).toBeGreaterThan(1);
     expect(screen.getByRole('button', { name: '下一步：进入定位分析' })).toBeVisible();
     expect(screen.queryByText('定位分析结果')).toBeNull();
+  });
+
+  it('renders multi-source tool calls instead of an image in verify stage', async () => {
+    const user = userEvent.setup();
+    render(<GuidedIncidentDemo runtime={new MockIncidentRuntime()} persist={false} />);
+
+    await user.click(await screen.findByRole('button', { name: '开始演示：执行智能核验' }));
+
+    // 核验阶段固定产出 4 个内部接口工具调用卡片（Metrics / Alerts / Logs / Change Records），
+    // 旧的多模态截图入口已下线，确保 UI 不再回退到图像路线。
+    expect(screen.getAllByText(/metrics\.query|alerts\.context_fetch|logs\.search|change_records\.list/).length).toBeGreaterThanOrEqual(4);
+    expect(screen.queryByText(/替换核验图片|内置合成监控截图|merchant-monitor/)).toBeNull();
   });
 });

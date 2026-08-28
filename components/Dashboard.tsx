@@ -139,7 +139,7 @@ export default function Dashboard() {
               <h1>商户故障 AI 处置台</h1>
             </div>
           </div>
-          <div className={runtimeMode === 'llm' ? 'runtime-mode runtime-mode-real' : 'runtime-mode'}><span className="live-dot" /><div><strong>{runtimeMode === 'llm' ? '真实模型调用' : '示例数据演示'}</strong><small>{runtimeMode === 'llm' ? '真实多模态模型执行' : '本地确定性执行'}</small></div></div>
+          <div className={runtimeMode === 'llm' ? 'runtime-mode runtime-mode-real' : 'runtime-mode'}><span className="live-dot" /><div><strong>{runtimeMode === 'llm' ? '真实模型调用' : '示例数据演示'}</strong><small>{runtimeMode === 'llm' ? '真实模型执行' : '本地确定性执行'}</small></div></div>
         </header>
 
         <div className={`content-wrap ${activeView === 'demo' ? 'demo-content-wrap' : ''}`}>

@@ -3,8 +3,6 @@ import { incidentSummaries } from '../../mock-data';
 import { runtimeScenarios, resolveStageFixture, scenarioOrder } from './index';
 import { gatewayTimeoutScenario } from './gateway-timeout';
 import { channelReboundScenario } from './channel-rebound';
-import { falseAlarmScenario } from './false-alarm';
-import { merchantCertScenario } from './merchant-cert';
 
 const REQUIRED_STAGES = ['verify', 'locate', 'contact', 'escalate', 'recover', 'evaluate'] as const;
 
@@ -31,7 +29,7 @@ describe('scenarios/registry', () => {
       for (const stage of REQUIRED_STAGES) {
         expect(scenario.stages[stage], `${id} missing ${stage}`).toBeDefined();
         expect(scenario.stages[stage].stage, `${id}.${stage}.stage`).toBe(stage);
-        expect(typeof scenario.stages[stage].input, `${id}.${stage}.input`).toBe('object');
+        expect(typeof scenario.stages[stage].context, `${id}.${stage}.context`).toBe('object');
         expect(scenario.stages[stage].output, `${id}.${stage}.output`).toBeDefined();
         expect(typeof scenario.stages[stage].title, `${id}.${stage}.title`).toBe('string');
       }
@@ -97,8 +95,7 @@ describe('scenarios/registry', () => {
       const scenario = runtimeScenarios[summary.scenarioId];
       expect(scenario, `${summary.id} scenarioId=${summary.scenarioId} 未注册`).toBeDefined();
       expect(scenario.incidentId).toBe(summary.id);
-      // 演示链路必须能跳转：场景 monitorImage 必须可用，merchant/title 也要对得上事故摘要。
-      expect(scenario.monitorImage.startsWith('/mock/'), `${summary.id} monitorImage`).toBe(true);
+      // 事故摘要与场景上下文必须双向对得上：商户 / 标题 / 等级一致。
       expect(scenario.incident.merchant).toBe(summary.merchant);
     }
   });

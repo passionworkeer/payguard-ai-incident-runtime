@@ -16,37 +16,38 @@ const run = {
 const execution = { stage: 'verify', provider: 'real_llm' } as StageExecution;
 
 describe('LlmIncidentRuntime', () => {
-  it('sends the verify image only with the verify command', async () => {
+  it('posts the execute command without sending any image payload', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(run), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ run, execution }), { status: 200 }));
     const runtime = new LlmIncidentRuntime('/api/runtime', fetcher);
-    runtime.setVerifyImage({ mediaType: 'image/png', data: 'iVBORw0KGgo=', source: 'uploaded' });
 
     await runtime.createIncident('gateway-timeout');
     await runtime.executeStage('LLM-1', 'verify');
 
     const [, init] = fetcher.mock.calls[1];
-    expect(JSON.parse(String(init.body))).toMatchObject({
+    const body = JSON.parse(String(init.body));
+    expect(body).toMatchObject({
       action: 'execute',
       runId: 'LLM-1',
       stage: 'verify',
-      image: { mediaType: 'image/png', source: 'uploaded' },
     });
+    // 核验图片字段已下线：请求体不应再出现 image/mediaType/source。
+    expect(body).not.toHaveProperty('image');
+    expect(JSON.stringify(body)).not.toContain('mediaType');
   });
 
   it('loads the public configuration without exposing a key', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       configured: true,
       provider: 'anthropic-compatible',
-      model: 'multimodal-model',
-      multimodal: true,
+      model: 'evidence-model',
     }), { status: 200 }));
     const runtime = new LlmIncidentRuntime('/api/runtime', fetcher);
 
     const config = await runtime.getPublicConfig();
 
-    expect(config).toMatchObject({ configured: true, model: 'multimodal-model', multimodal: true });
+    expect(config).toMatchObject({ configured: true, model: 'evidence-model' });
     expect(JSON.stringify(config)).not.toContain('key');
   });
 
@@ -60,8 +61,7 @@ describe('LlmIncidentRuntime', () => {
       return Promise.resolve(new Response(JSON.stringify({
         configured: true,
         provider: 'anthropic-compatible',
-        model: 'multimodal-model',
-        multimodal: true,
+        model: 'evidence-model',
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     } as typeof fetch;
     try {

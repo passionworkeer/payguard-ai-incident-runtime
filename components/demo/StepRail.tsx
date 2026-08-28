@@ -43,7 +43,8 @@ export function StepProgress({
         const executed = state === 'complete' || state === 'current' || state === 'pending_approval' || state === 'needs_human';
         const isCurrent = selectedStage === stage;
         const labelClass = `demo-progress-step ${state !== 'pending' && isCurrent ? 'is-current' : ''} is-${state.replace('_', '-')}`;
-        const dotSymbol = state === 'complete' ? '✓' : state === 'pending_approval' ? '!' : state === 'needs_human' ? '⏸' : state === 'skipped' ? '–' : String(index + 1);
+        // 状态字符全部用纯文本/ASCII：避免在演示截图、打印与 a11y 阅读器里出现方框字。
+        const dotSymbol = state === 'complete' ? 'v' : state === 'pending_approval' ? '!' : state === 'needs_human' ? '||' : state === 'skipped' ? '-' : String(index + 1);
         const statusText = state === 'complete' ? '已完成' : state === 'current' ? '当前步骤' : state === 'pending_approval' ? '待审批' : state === 'needs_human' ? '已转人工' : state === 'skipped' ? '已跳过' : '待执行';
         return (
           <span key={stage} style={{ display: 'inline-flex', alignItems: 'center' }}>

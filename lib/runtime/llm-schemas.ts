@@ -15,32 +15,47 @@ const outputSchemas: Record<IncidentStage, JsonSchema> = {
       severity: { enum: ['P0', 'P1', 'P2'] },
       confidence: { type: 'number', minimum: 0, maximum: 100 },
       impactScope: string,
-      visualFindings: strings,
+      // 来自多源工具信号聚合：描述哪几个工具 flag 触发结论，不引用截图。
+      evidenceHighlights: strings,
+      signalSummary: string,
     },
-    required: ['isIncident', 'severity', 'confidence', 'impactScope', 'visualFindings'],
+    required: ['isIncident', 'severity', 'confidence', 'impactScope', 'evidenceHighlights'],
     additionalProperties: false,
   },
   locate: {
     type: 'object',
-    properties: { topCause: string, alternatives: strings, evidenceRefs: strings, recommendedActions: strings },
-    required: ['topCause', 'alternatives', 'evidenceRefs', 'recommendedActions'],
+    properties: {
+      topCause: string,
+      alternatives: strings,
+      evidenceRefs: strings,
+      recommendedAction: string,
+      causeOwner: { enum: ['merchant', 'channel', 'platform'] },
+    },
+    required: ['topCause', 'alternatives', 'evidenceRefs', 'recommendedAction'],
     additionalProperties: false,
   },
   contact: {
     type: 'object',
-    properties: { subject: string, message: string, actionLinkLabel: string, channels: strings },
+    properties: {
+      subject: string,
+      message: string,
+      actionLinkLabel: string,
+      channels: strings,
+      tone: { enum: ['incident_brief', 'guidance', 'reassurance', 'informational'] },
+      guidanceSteps: { type: 'array', items: string, maxItems: 6 },
+    },
     required: ['subject', 'message', 'actionLinkLabel', 'channels'],
     additionalProperties: false,
   },
   escalate: {
     type: 'object',
-    properties: { ticketTitle: string, teams: strings, sla: string, escalationReason: string, simulatedAction: { const: true } },
-    required: ['ticketTitle', 'teams', 'sla', 'escalationReason', 'simulatedAction'],
+    properties: { ticketTitle: string, teams: strings, sla: string, escalationReason: string, escalationLevel: string, simulated: { const: true } },
+    required: ['ticketTitle', 'teams', 'sla', 'escalationReason', 'simulated'],
     additionalProperties: false,
   },
   recover: {
     type: 'object',
-    properties: { recovered: boolean, stableWindows: number, residualRisk: string, observationAdvice: string },
+    properties: { recovered: boolean, stableWindows: number, residualRisk: string, observationAdvice: string, attemptNote: string },
     required: ['recovered', 'stableWindows', 'residualRisk', 'observationAdvice'],
     additionalProperties: false,
   },
@@ -124,17 +139,17 @@ function pickOutput(stage: IncidentStage, value: unknown): Record<string, unknow
     case 'verify': {
       if (typeof value.isIncident !== 'boolean' || !['P0', 'P1', 'P2'].includes(String(value.severity)) || typeof value.confidence !== 'number' || value.confidence < 0 || value.confidence > 100) return null;
       const impactScope = asString(value.impactScope);
-      const visualFindings = asStrings(value.visualFindings);
-      if (!impactScope || !visualFindings) return null;
-      return { isIncident: value.isIncident, severity: value.severity, confidence: value.confidence, impactScope, visualFindings };
+      const evidenceHighlights = asStrings(value.evidenceHighlights);
+      if (!impactScope || !evidenceHighlights) return null;
+      return { isIncident: value.isIncident, severity: value.severity, confidence: value.confidence, impactScope, evidenceHighlights, ...(typeof value.signalSummary === 'string' ? { signalSummary: clampString(value.signalSummary) } : {}) };
     }
     case 'locate': {
       const topCause = asString(value.topCause);
       const alternatives = asStrings(value.alternatives);
       const evidenceRefs = asStrings(value.evidenceRefs);
-      const recommendedActions = asStrings(value.recommendedActions);
-      if (!topCause || !alternatives || !evidenceRefs || !recommendedActions) return null;
-      return { topCause, alternatives, evidenceRefs, recommendedActions };
+      const recommendedAction = asString(value.recommendedAction);
+      if (!topCause || !alternatives || !evidenceRefs || !recommendedAction) return null;
+      return { topCause, alternatives, evidenceRefs, recommendedAction, ...(['merchant', 'channel', 'platform'].includes(String(value.causeOwner)) ? { causeOwner: value.causeOwner } : {}) };
     }
     case 'contact': {
       const subject = asString(value.subject);
@@ -142,23 +157,28 @@ function pickOutput(stage: IncidentStage, value: unknown): Record<string, unknow
       const actionLinkLabel = asString(value.actionLinkLabel);
       const channels = asStrings(value.channels);
       if (!subject || !message || !actionLinkLabel || !channels) return null;
-      return { subject, message, actionLinkLabel, channels };
+      const result: Record<string, unknown> = { subject, message, actionLinkLabel, channels };
+      if (['incident_brief', 'guidance', 'reassurance', 'informational'].includes(String(value.tone))) result.tone = value.tone;
+      const guidanceSteps = asStrings(value.guidanceSteps);
+      if (guidanceSteps) result.guidanceSteps = guidanceSteps;
+      return result;
     }
     case 'escalate': {
       const ticketTitle = asString(value.ticketTitle);
       const teams = asStrings(value.teams);
       const sla = asString(value.sla);
       const escalationReason = asString(value.escalationReason);
-      // simulatedAction 是意图声明而非业务字段；模型可能返回 true / "true" / 1，宽松归一到布尔。
-      if (!ticketTitle || !teams || !sla || !escalationReason || !value.simulatedAction) return null;
-      return { ticketTitle, teams, sla, escalationReason, simulatedAction: true };
+      const escalationLevel = asString(value.escalationLevel);
+      if (!ticketTitle || !teams || !sla || !escalationReason || !value.simulated) return null;
+      return { ticketTitle, teams, sla, escalationReason, simulated: true, ...(escalationLevel ? { escalationLevel } : {}) };
     }
     case 'recover': {
       if (typeof value.recovered !== 'boolean' || typeof value.stableWindows !== 'number') return null;
       const residualRisk = asString(value.residualRisk);
       const observationAdvice = asString(value.observationAdvice);
       if (!residualRisk || !observationAdvice) return null;
-      return { recovered: value.recovered, stableWindows: value.stableWindows, residualRisk, observationAdvice };
+      const attemptNote = asString(value.attemptNote);
+      return { recovered: value.recovered, stableWindows: value.stableWindows, residualRisk, observationAdvice, ...(attemptNote ? { attemptNote } : {}) };
     }
     case 'evaluate': {
       if (typeof value.humanCorrected !== 'boolean') return null;

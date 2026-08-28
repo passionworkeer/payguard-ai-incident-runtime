@@ -173,17 +173,17 @@
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Ornate design
-- ❌ No filtering
+- [X] Ornate design
+- [X] No filtering
 
 ### Additional Forbidden Patterns
 
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
+- [X] **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
+- [X] **Missing cursor:pointer** — All clickable elements must have cursor:pointer
+- [X] **Layout-shifting hovers** — Avoid scale transforms that shift layout
+- [X] **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
+- [X] **Instant state changes** — Always use transitions (150-300ms)
+- [X] **Invisible focus states** — Focus states must be visible for a11y
 
 ---
 

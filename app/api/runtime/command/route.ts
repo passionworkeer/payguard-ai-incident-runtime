@@ -1,4 +1,3 @@
-import type { StageImage } from '../../../../lib/runtime/llm-client';
 import { LlmRuntimeError, ServerIncidentOrchestrator } from '../../../../lib/runtime/server-orchestrator';
 import { stageOrder, type IncidentStage } from '../../../../lib/runtime/types';
 
@@ -12,19 +11,11 @@ function asStage(value: unknown): IncidentStage | null {
   return stageOrder.includes(value as IncidentStage) ? value as IncidentStage : null;
 }
 
-function asImage(value: unknown): StageImage | undefined {
-  if (!isRecord(value)) return undefined;
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(String(value.mediaType))) return undefined;
-  if (typeof value.data !== 'string' || !['built_in', 'uploaded'].includes(String(value.source))) return undefined;
-  return value as unknown as StageImage;
-}
-
 function safeError(error: unknown) {
   if (error instanceof LlmRuntimeError) {
     const status = error.code === 'LLM_UNAUTHORIZED' ? 401
       : error.code === 'LLM_RATE_LIMITED' ? 429
-        : error.code === 'IMAGE_INVALID' ? 400
-          : 502;
+        : 502;
     return Response.json({ code: error.code, message: error.message, retryable: error.retryable }, { status });
   }
   const code = error instanceof Error ? error.message : 'runtime_error';
@@ -42,7 +33,7 @@ export async function POST(request: Request) {
       case 'execute': {
         const stage = asStage(body.stage);
         if (!stage) throw new Error('stage_out_of_order');
-        return Response.json(await orchestrator.executeStage(String(body.runId ?? ''), stage, asImage(body.image)));
+        return Response.json(await orchestrator.executeStage(String(body.runId ?? ''), stage));
       }
       case 'approve':
         return Response.json(await orchestrator.approveAction(String(body.runId ?? ''), String(body.actionId ?? '')));

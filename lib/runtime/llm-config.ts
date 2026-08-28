@@ -4,7 +4,6 @@ export interface PublicLlmConfig {
   configured: boolean;
   provider: 'anthropic-compatible';
   model: string;
-  multimodal: true;
 }
 
 function clean(value: string | undefined) {
@@ -30,6 +29,5 @@ export function publicLlmConfig(config = readLlmConfig()): PublicLlmConfig {
     configured,
     provider: 'anthropic-compatible',
     model: configured ? config.model : '未配置',
-    multimodal: true,
   };
 }

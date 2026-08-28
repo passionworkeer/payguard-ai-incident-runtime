@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
-import type { StageImage } from '../../lib/runtime/llm-client';
 import type { PublicLlmConfig } from '../../lib/runtime/llm-config';
 import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
 import { clearMockRun } from '../../lib/runtime/persistence';
-import { imageDetailLabel, imageMediaTypeError, readImageBase64 } from '../../lib/runtime/image-file';
 import type { IncidentRun, IncidentRuntime, IncidentStage } from '../../lib/runtime/types';
 import { plannedStageCount, retryCount } from '../../lib/runtime/state-machine';
-import { IncidentImageInput, type VerifyImageMeta } from './IncidentImageInput';
 import { RuntimeModeSwitch, type DemoRuntimeMode } from './RuntimeModeSwitch';
 import { ScenarioPicker } from './ScenarioPicker';
 import { StageWorkspace } from './StageWorkspace';
@@ -31,28 +28,22 @@ const falseAlarmNextLabel = '下一步：回流误报样本到数据集';
 const reboundRetryLabel = '再次判断是否恢复（上一轮回弹）';
 const reboundFirstLabel = '下一步：判断是否恢复（首次）';
 
-const builtInImageUrl = '/mock/merchant-monitor.png';
-const builtInImageMeta: VerifyImageMeta = { name: '内置合成监控截图', detail: 'PNG · 合成监控面板' };
-
 // 真实模式单步常见 8-25s：超过 6s 仍未返回就开始展示等待提示；累计等待在主操作按钮上展示以秒级计时。
 const SLOW_HINT_DELAY_MS = 6000;
 
 export interface ConfigurableLlmRuntime extends IncidentRuntime {
   getPublicConfig(): Promise<PublicLlmConfig>;
-  setVerifyImage(image: StageImage): void;
 }
 
 export default function GuidedIncidentDemo({
   runtime,
   llmRuntime,
-  initialLlmImage,
   persist = true,
   onRunChange,
   initialScenarioId = 'gateway-timeout',
 }: {
   runtime?: IncidentRuntime;
   llmRuntime?: ConfigurableLlmRuntime;
-  initialLlmImage?: StageImage;
   persist?: boolean;
   onRunChange?: (run: IncidentRun) => void;
   initialScenarioId?: string;
@@ -61,10 +52,6 @@ export default function GuidedIncidentDemo({
   // 入口优先真实模型：有 llmRuntime 就默认真实模式；配置解析出「未配置」时再自动回退（见下方 config effect）。
   const [mode, setMode] = useState<DemoRuntimeMode>(llmRuntime ? 'llm' : 'mock');
   const [llmConfig, setLlmConfig] = useState<PublicLlmConfig | null>(null);
-  const [verifyImage, setVerifyImage] = useState<StageImage | null>(initialLlmImage ?? null);
-  const [imageMeta, setImageMeta] = useState<VerifyImageMeta | null>(initialLlmImage ? builtInImageMeta : null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [imageReloadKey, setImageReloadKey] = useState(0);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // 当前演示场景：Dashboard 用它驱动「进入处置演示」按行跳转；GuidedIncidentDemo 自己也提供切换器。
   const [scenarioId, setScenarioId] = useState<string>(initialScenarioId);
@@ -102,46 +89,11 @@ export default function GuidedIncidentDemo({
     void llmRuntime
       .getPublicConfig()
       .then(resolve)
-      .catch(() => resolve({ configured: false, provider: 'anthropic-compatible', model: '未配置', multimodal: true }));
+      .catch(() => resolve({ configured: false, provider: 'anthropic-compatible', model: '未配置' }));
     return () => {
       active = false;
     };
   }, [llmRuntime]);
-
-  const applyImage = useCallback((image: StageImage | null, meta: VerifyImageMeta | null) => {
-    setVerifyImage(image);
-    setImageMeta(meta);
-    if (image) llmRuntime?.setVerifyImage(image);
-  }, [llmRuntime]);
-
-  // 默认即真实模式时没有 switchMode 的时机把 initialLlmImage 推给 runtime，这里统一兜底同步。
-  useEffect(() => {
-    if (llmRuntime && verifyImage) llmRuntime.setVerifyImage(verifyImage);
-  }, [llmRuntime, verifyImage]);
-
-  useEffect(() => {
-    if (mode !== 'llm' || !llmRuntime || verifyImage) return;
-    let active = true;
-    void (async () => {
-      try {
-        const response = await fetch(builtInImageUrl);
-        if (!response.ok) throw new Error('load_failed');
-        const blob = await response.blob();
-        const mediaType = (blob.type || 'image/png') as StageImage['mediaType'];
-        const invalid = imageMediaTypeError({ type: mediaType, size: blob.size });
-        if (invalid) throw new Error('load_failed');
-        const data = await readImageBase64(blob);
-        if (!active || !data) return;
-        applyImage({ mediaType, data, source: 'built_in' }, { name: builtInImageMeta.name, detail: imageDetailLabel(mediaType, blob.size) });
-        setImageError(null);
-      } catch {
-        if (active) setImageError('内置监控截图加载失败，可上传本地图片，或稍后重试。');
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [applyImage, imageReloadKey, llmRuntime, mode, verifyImage]);
 
   const switchMode = useCallback((next: DemoRuntimeMode) => {
     if (!llmRuntime || locked || next === mode) return;
@@ -149,10 +101,9 @@ export default function GuidedIncidentDemo({
     if (hasProgress && typeof window !== 'undefined' && !window.confirm(`切换运行模式将丢弃当前 ${run.completedStages.length} 步进度和${run.status === 'awaiting_approval' ? '待审批内容' : run.status === 'needs_human' ? '人工处置说明' : '当前运行'}。确认继续？`)) {
       return;
     }
-    if (next === 'llm' && verifyImage) llmRuntime.setVerifyImage(verifyImage);
     if (persist && typeof window !== 'undefined') clearMockRun(window.localStorage);
     setMode(next);
-  }, [llmRuntime, locked, mode, persist, run, verifyImage]);
+  }, [llmRuntime, locked, mode, persist, run]);
 
   // 切换演示场景：同样需确认丢进度，避免误点清掉已演示链路。
   const switchScenario = useCallback((next: string) => {
@@ -181,7 +132,6 @@ export default function GuidedIncidentDemo({
   const elapsedSecLabel = demo.busy && mode === 'llm' && elapsedMs > 1500 ? `${Math.floor(elapsedMs / 1000)}s` : null;
   const expectedRunMode = mode === 'llm' ? 'llm' : 'mock';
   const runMatchesMode = run?.mode === expectedRunMode;
-  const showImageInput = mode === 'llm' && (!run || !runMatchesMode || run.currentStage === 'verify');
   // 未配置真实模型：配置解析完成后已在 effect 里自动回退，这里给出可见解释而不是只把按钮禁用。
   const unconfiguredNotice = llmRuntime && llmConfig?.configured === false ? (
     <p className="demo-fallback-notice" role="status">真实模型未配置（检查 .env.local 中的 key / url / model），已自动切换示例数据。</p>
@@ -203,26 +153,11 @@ export default function GuidedIncidentDemo({
           {llmConfig?.configured === false ? <span className="llm-config-warning">检查 .env.local 中的 key / url / model</span> : null}
           {mode === 'llm' && llmConfig?.configured ? (
             <div className="llm-mode-banner">
-              <span className="llm-badge-multimodal">MULTIMODAL</span>
+              <span className="llm-badge-evidence">EVIDENCE LLM</span>
               <span className="llm-model-name">{llmConfig.model}</span>
             </div>
           ) : null}
-          {showImageInput && verifyImage && imageMeta ? (
-            <IncidentImageInput
-              image={verifyImage}
-              meta={imageMeta}
-              onReplace={(image, meta) => {
-                setImageError(null);
-                applyImage(image, meta);
-              }}
-              onRestore={() => applyImage(initialLlmImage ?? null, initialLlmImage ? builtInImageMeta : null)}
-            />
-          ) : mode === 'llm' && !verifyImage ? (
-            <span className="verify-image-hint" role={imageError ? 'alert' : undefined}>
-              {imageError ?? '正在加载内置监控截图…'}
-              {imageError ? <button type="button" className="verify-image-retry" onClick={() => { setImageError(null); setImageReloadKey((k) => k + 1); }}>重新加载</button> : null}
-            </span>
-          ) : null}
+          <p className="llm-mode-note">多源工具调用：Metrics / Alerts / Logs / Change Records 结构化返回，模型基于 JSON 上下文做决策。</p>
         </div>
       ) : null}
     </div>
@@ -247,10 +182,8 @@ export default function GuidedIncidentDemo({
   const awaitingApproval = run.status === 'awaiting_approval';
   const completed = run.status === 'completed';
   const needsHuman = run.status === 'needs_human';
-  const verifyImagePending = mode === 'llm' && run.currentStage === 'verify' && !verifyImage;
 
   const primaryActionLabel = (() => {
-    if (verifyImagePending && !demo.busy) return '等待核验图片就绪…';
     if (demo.busy) return mode === 'llm' ? `真实模型正在执行… ${elapsedSecLabel ?? ''}`.trim() : 'AI 正在执行…';
     // 误报短路：verify 已经判非故障，下一步是「回流误报样本」。
     if (scenarioId === 'false-alarm' && run.currentStage === 'evaluate') return falseAlarmNextLabel;
@@ -317,7 +250,7 @@ export default function GuidedIncidentDemo({
             <button type="button" className="demo-cta" onClick={demo.approve} disabled={demo.busy}>批准并发送</button>
           </>
         ) : completed ? (
-          <span className="complete-chip">✓ 全链路处置完成</span>
+          <span className="complete-chip">[v] 全链路处置完成</span>
         ) : needsHuman ? (
           <span className="human-chip">已转人工处理 · 可点击重置演示重新开始</span>
         ) : (
@@ -325,7 +258,7 @@ export default function GuidedIncidentDemo({
             type="button"
             className={`demo-cta${demo.busy ? ' is-busy' : ''}`}
             onClick={demo.execute}
-            disabled={demo.busy || verifyImagePending}
+            disabled={demo.busy}
             aria-busy={demo.busy}
           >
             {demo.busy ? <span className="demo-spinner" aria-hidden="true" /> : null}
@@ -338,7 +271,7 @@ export default function GuidedIncidentDemo({
       </div>
 
       {demo.error ? <p className="demo-cta-error" role="alert">执行异常：{demo.error}</p> : null}
-      {showSlowHint ? <p className="demo-cta-error">真实模型正在分析图片与证据，预计 10–25 秒，已等待 {elapsedSecLabel}…</p> : null}
+      {showSlowHint ? <p className="demo-cta-error">真实模型正在调用多个内部接口并综合证据，预计 10–25 秒，已等待 {elapsedSecLabel}…</p> : null}
     </div>
   );
 }

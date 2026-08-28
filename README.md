@@ -14,8 +14,8 @@
 - **运营总览**：北极星 / 一级 / 护栏三层指标（9 卡）、MTTR 分解堆叠条（合计 = 北极星卡口径）、告警量 vs 事故量 + 事故窗口阴影、成功率 / P95 双轴 + 基线 markLine、原始告警流。
 - **流程分析**：全链路漏斗、桑基图、阶段 P50/P95/SLA、工具使用率与触达行为漏斗。
 - **评测产品化常态化**：场景内置 ground-truth，每次 Run 完成自动追加样本到 localStorage，AI 评测页实时聚合 Accuracy / Precision / Recall / F1 / 根因命中率 + 混淆矩阵，会话累积最近 20 条。
-- **双运行时**：默认 Mock（确定性场景 + localStorage）；可在页面显式切换到真实多模态 LLM Runtime（服务端编排，Anthropic Messages 兼容）。
-- **多模态核验**：真实模式下智能核验向模型发送合成监控截图（支持上传替换），其余阶段消费结构化前序输出。
+- **双运行时**：默认 Mock（确定性场景 + localStorage）；可在页面显式切换到真实 LLM Runtime（服务端编排，Anthropic Messages 兼容）。
+- **结构化工具核验**：真实模式下智能核验调用 4 个内部接口工具（Metrics / Alerts / Logs / Change Records）做多源信号聚合，其余阶段消费结构化前序输出。
 - **本地恢复**：Mock 进度 + 评测样本均写入 `localStorage`，刷新后继续；重置后从智能核验重新开始。
 
 ## 本地运行
@@ -36,7 +36,7 @@ npm run dev -- --port 3002
 ```text
 key=<你的 API Key>
 url=<HTTPS Base URL，Anthropic Messages 兼容>
-model=<多模态模型名>
+model=<模型名>
 ```
 
 - 三个变量齐全且 `url` 为合法 HTTPS 地址时，页面顶部「真实 LLM」入口才可点击；`/api/runtime/config` 只暴露 `configured`、Provider 和模型名，不会泄露 Key。
@@ -77,7 +77,7 @@ GuidedIncidentDemo
 IncidentRuntime（types.ts 契约，二选一切换）
    ├─ MockIncidentRuntime  → 确定性场景 + localStorage
    └─ LlmIncidentRuntime   → /api/runtime/command（服务端编排真实 LLM）
-                                   └─ ServerIncidentOrchestrator → callStageLlm（Anthropic 兼容多模态）
+                                   └─ ServerIncidentOrchestrator → callStageLlm（Anthropic Messages 兼容）
 ```
 
 `IncidentRuntime` 定义在 `lib/runtime/types.ts`。真实路径的服务端接口：
@@ -92,15 +92,13 @@ IncidentRuntime（types.ts 契约，二选一切换）
 - 解析方差（模型输出轻微超出 Schema 数量约束）会自动截断收敛，偶发不可解析时服务端原样重试一次真实调用（重试的 token 用量也会计入观测面板）。
 - 错误响应只包含安全错误码、用户可读消息和 `retryable`，不透传请求头、密钥或上游正文。
 - 同一 Run 的服务端命令串行执行：并发点击不会跳过阶段或回退状态机；浏览器侧请求有 90 秒兜底超时，不会永久锁死界面。
-- 内置合成监控截图 4 个变体（`public/mock/merchant-monitor*.png`），可由 `node scripts/generate-monitor-png.mjs` 重新生成（纯合成数据）：gateway 黄金路径、false-alarm 健康但流量涨、merchant-cert 签名失败 61.2×、channel-rebound 工行渠道 12.4% + 回弹形状。
 
 ## 目录重点
 
-- `lib/runtime/`：运行时契约、4 场景 fixture + groundTruth、共享分支状态机、持久化、服务端命令适配器、多模态 Client、六阶段 Schema 与服务端编排。
+- `lib/runtime/`：运行时契约、4 场景 fixture + groundTruth、共享分支状态机、持久化、服务端命令适配器、LLM Client、六阶段 Schema 与服务端编排。
 - `lib/runtime/evaluation.ts` + `lib/runtime/eval-store.ts`：ground-truth 判分（judgeVerify / matchRootCause）+ 会话样本 FIFO 持久化。
 - `lib/overview-data.ts`：MTTR 分解、30 点时序、原始告警流。
-- `components/demo/`：逐步处置控制器、六步导航（支持 skipped 状态）、执行工作区、模式切换、场景选择器与核验图片控件。
+- `components/demo/`：逐步处置控制器、六步导航（支持 skipped 状态）、执行工作区、模式切换、场景选择器与多源工具调用卡片。
 - `components/OverviewView.tsx`：三层指标 + MTTR 分解 + 时序 + 告警流。
 - `components/AnalyticsViews.tsx`：漏斗、桑基图、延迟、工具、评测图表 + 「本次会话实时评测」面板。
-- `scripts/generate-monitor-png.mjs`：4 个监控截图变体参数化生成器。
 - `docs/demo-script.md`：Mock / 真实双路线讲解脚本（含 4 场景讲解词 + 总览 + 评测判分）。

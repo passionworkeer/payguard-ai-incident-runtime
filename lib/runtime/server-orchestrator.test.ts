@@ -2,14 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StageLlmResult } from './llm-client';
 import { LlmRuntimeError, ServerIncidentOrchestrator } from './server-orchestrator';
 
-const image = { mediaType: 'image/png' as const, data: 'iVBORw0KGgo=', source: 'built_in' as const };
-
 function llmResult(stage: string): StageLlmResult {
   const outputs: Record<string, Record<string, unknown>> = {
-    verify: { isIncident: true, severity: 'P0', confidence: 96, impactScope: '核心支付', visualFindings: ['成功率下降'] },
-    locate: { topCause: '连接池耗尽', alternatives: ['网络抖动'], evidenceRefs: ['log://1'], recommendedActions: ['扩容'] },
+    verify: { isIncident: true, severity: 'P0', confidence: 96, impactScope: '核心支付', evidenceHighlights: ['成功率下降'], signalSummary: '4 类工具中 3 类 flag' },
+    locate: { topCause: '连接池耗尽', alternatives: ['网络抖动'], evidenceRefs: ['log://1'], recommendedAction: '扩容', causeOwner: 'platform' },
     contact: { subject: '故障通知', message: '连接池异常，正在处理。', actionLinkLabel: '查看详情', channels: ['站内信'] },
-    escalate: { ticketTitle: 'P0 支付超时', teams: ['网关平台'], sla: '15 分钟', escalationReason: 'P0', simulatedAction: true },
+    escalate: { ticketTitle: 'P0 支付超时', teams: ['网关平台'], sla: '15 分钟', escalationReason: 'P0', simulated: true, escalationLevel: 'L2' },
     recover: { recovered: true, stableWindows: 3, residualRisk: '低', observationAdvice: '观察 15 分钟' },
     evaluate: { sampleId: 'EVAL-REAL-001', verifyLabel: 'TP', predictedRootCause: '连接池耗尽', finalRootCause: '连接池耗尽', humanCorrected: false, dataset: 'real-demo-v1', qualityChecks: ['完整'] },
   };
@@ -21,8 +19,7 @@ function llmResult(stage: string): StageLlmResult {
     summary: `${stage} 完成`,
     usage: { inputTokens: 100, outputTokens: 40 },
     durationMs: 680,
-    model: 'multimodal-model',
-    imageSource: stage === 'verify' ? 'built_in' : undefined,
+    model: 'evidence-model',
   };
 }
 
@@ -40,14 +37,14 @@ describe('ServerIncidentOrchestrator', () => {
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
 
-    const result = await orchestrator.executeStage(run.id, 'verify', image);
+    const result = await orchestrator.executeStage(run.id, 'verify');
 
-    expect(caller).toHaveBeenCalledWith(expect.objectContaining({ stage: 'verify', image }));
+    expect(caller).toHaveBeenCalledWith(expect.objectContaining({ stage: 'verify' }));
+    expect(caller.mock.calls[0][0]).not.toHaveProperty('image');
     expect(result.run.currentStage).toBe('locate');
     expect(result.execution).toMatchObject({
       provider: 'real_llm',
-      model: 'multimodal-model',
-      imageSource: 'built_in',
+      model: 'evidence-model',
       metrics: { inputTokens: 100, outputTokens: 40, latencyMs: 680, confidence: 95 },
     });
   });
@@ -56,7 +53,7 @@ describe('ServerIncidentOrchestrator', () => {
     const caller = vi.fn().mockImplementation(({ stage }: { stage: string }) => Promise.resolve(llmResult(stage)));
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
-    await orchestrator.executeStage(run.id, 'verify', image);
+    await orchestrator.executeStage(run.id, 'verify');
     await orchestrator.executeStage(run.id, 'locate');
     const contacted = await orchestrator.executeStage(run.id, 'contact');
 
@@ -71,7 +68,7 @@ describe('ServerIncidentOrchestrator', () => {
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
 
-    const error = await orchestrator.executeStage(run.id, 'verify', image).catch((caught) => caught);
+    const error = await orchestrator.executeStage(run.id, 'verify').catch((caught) => caught);
 
     expect(error).toBeInstanceOf(LlmRuntimeError);
     expect(error).toMatchObject({ code: 'LLM_TIMEOUT', retryable: true });
@@ -86,7 +83,7 @@ describe('ServerIncidentOrchestrator', () => {
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
 
-    const result = await orchestrator.executeStage(run.id, 'verify', image);
+    const result = await orchestrator.executeStage(run.id, 'verify');
 
     expect(caller).toHaveBeenCalledTimes(2);
     expect(result.run.currentStage).toBe('locate');
@@ -97,7 +94,7 @@ describe('ServerIncidentOrchestrator', () => {
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
 
-    const error = await orchestrator.executeStage(run.id, 'verify', image).catch((caught) => caught);
+    const error = await orchestrator.executeStage(run.id, 'verify').catch((caught) => caught);
 
     expect(error).toBeInstanceOf(LlmRuntimeError);
     expect(error).toMatchObject({ code: 'LLM_NO_TOOL' });
@@ -117,8 +114,8 @@ describe('ServerIncidentOrchestrator', () => {
     const run = await orchestrator.createIncident('gateway-timeout');
 
     const [first, second] = await Promise.allSettled([
-      orchestrator.executeStage(run.id, 'verify', image),
-      orchestrator.executeStage(run.id, 'verify', image),
+      orchestrator.executeStage(run.id, 'verify'),
+      orchestrator.executeStage(run.id, 'verify'),
     ]);
 
     const outcomes = [first.status, second.status].sort();
@@ -136,7 +133,7 @@ describe('ServerIncidentOrchestrator', () => {
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
 
-    const result = await orchestrator.executeStage(run.id, 'verify', image);
+    const result = await orchestrator.executeStage(run.id, 'verify');
 
     expect(result.execution.metrics).toMatchObject({ inputTokens: 180, outputTokens: 70 });
   });
@@ -145,7 +142,7 @@ describe('ServerIncidentOrchestrator', () => {
     const caller = vi.fn().mockImplementation(({ stage }: { stage: string }) => Promise.resolve(llmResult(stage)));
     const orchestrator = new ServerIncidentOrchestrator(caller);
     const run = await orchestrator.createIncident('gateway-timeout');
-    await orchestrator.executeStage(run.id, 'verify', image);
+    await orchestrator.executeStage(run.id, 'verify');
 
     const fresh = await orchestrator.resetRun(run.id);
 

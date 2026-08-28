@@ -1,11 +1,13 @@
 import type { IncidentStage } from './types';
 
 const stageInstructions: Record<IncidentStage, string> = {
-  verify: '交叉核对监控截图与结构化指标，判断是否为真实故障、严重度和影响范围。visualFindings 只能描述图片中可见趋势。注意区分容量波动与故障：若流量上涨但成功率与延迟仍在基线范围内，应判定 isIncident=false。',
-  locate: '基于核验结果、日志、变更和历史 Case 选择 Top-1 根因。证据引用必须来自输入，禁止虚构。',
-  contact: '基于已确认事实生成准确、分级且可操作的商户触达内容，不得加入未确认推测。',
-  escalate: '基于事故等级、影响金额和已批准触达生成内部升级方案。必须在 output 中显式输出 "simulatedAction": true（JSON 布尔值）以声明仅为模拟方案，不执行真实外部动作。',
-  recover: '比较三个连续窗口与事故前基线，判断是否稳定恢复；不得用单点回弹直接闭环。未达稳定标准就如实输出 recovered=false，系统会带新的观测窗口再次调用你，不要为了闭环放宽判据。',
+  // 多源信号聚合：模型消费 4 个内部接口的结构化返回（Metrics / Alerts / Logs / Change Records），
+  // 而不是看截图。任一异常即触发复核，全部正常才标 isIncident=false。
+  verify: '基于 4 类内部接口工具（metrics.query / alerts.context_fetch / logs.search / change_records.list）的结构化返回做多源信号聚合，判断是否为真实故障、严重度和影响范围。不得只凭单一信号下结论；至少 3/4 异常才能判定 isIncident=true，全部正常或仅容量类弱 flag 时判定 isIncident=false。',
+  locate: '基于核验结果、logs.search / change_records.list / case_rag.retrieve 的返回选择 Top-1 根因。证据引用必须来自输入，禁止虚构。',
+  contact: '基于已确认事实与 merchant.profile 返回的画像生成准确、分级且可操作的商户触达内容。message.composer 工具的输入 facts 字段只允许引用已确认事实，不得加入未确认推测。',
+  escalate: '基于事故等级、影响金额和已批准触达匹配升级策略与责任团队。必须在 output 中显式输出 "simulated": true 声明仅为模拟方案，不执行真实外部动作。',
+  recover: '基于 metrics.query + channel.health（新窗口数据）的返回判断是否稳定恢复；不得用单点回弹直接闭环。未达稳定标准就如实输出 recovered=false，系统会带新的观测窗口再次调用你，不要为了闭环放宽判据。',
   evaluate: '综合整个 Trace、审批与恢复事实生成评测样本，预测与最终事实必须分开记录。',
 };
 

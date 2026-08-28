@@ -8,12 +8,6 @@ export interface LlmConfig {
   model: string;
 }
 
-export interface StageImage {
-  mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
-  data: string;
-  source: 'built_in' | 'uploaded';
-}
-
 export type LlmErrorCode =
   | 'LLM_NOT_CONFIGURED'
   | 'LLM_UNAUTHORIZED'
@@ -22,8 +16,7 @@ export type LlmErrorCode =
   | 'LLM_UPSTREAM_ERROR'
   | 'LLM_NO_TOOL'
   | 'LLM_INVALID_OUTPUT'
-  | 'LLM_TRUNCATED'
-  | 'IMAGE_INVALID';
+  | 'LLM_TRUNCATED';
 
 export type StageLlmResult = {
   ok: true;
@@ -34,7 +27,6 @@ export type StageLlmResult = {
   usage: { inputTokens: number; outputTokens: number };
   durationMs: number;
   model: string;
-  imageSource?: StageImage['source'];
 } | {
   ok: false;
   code: LlmErrorCode;
@@ -49,7 +41,6 @@ interface CallStageRequest {
   config: LlmConfig;
   stage: IncidentStage;
   context: Record<string, unknown>;
-  image?: StageImage;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
@@ -65,18 +56,9 @@ function validateConfig(config: LlmConfig): LlmErrorCode | null {
   return null;
 }
 
-function validImage(image: StageImage | undefined) {
-  if (!image || !['image/png', 'image/jpeg', 'image/webp'].includes(image.mediaType)) return false;
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(image.data)) return false;
-  return Buffer.byteLength(image.data, 'base64') <= 4 * 1024 * 1024;
-}
-
 export async function callStageLlm(request: CallStageRequest): Promise<StageLlmResult> {
   if (validateConfig(request.config)) {
     return { ok: false, code: 'LLM_NOT_CONFIGURED', message: '真实 LLM 尚未配置。', retryable: false };
-  }
-  if (request.stage === 'verify' && !validImage(request.image)) {
-    return { ok: false, code: 'IMAGE_INVALID', message: '核验图片无效或超过 4 MB。', retryable: false };
   }
 
   const fetchImpl = request.fetchImpl ?? fetch;
@@ -86,9 +68,6 @@ export async function callStageLlm(request: CallStageRequest): Promise<StageLlmR
   const started = performance.now();
   const tool = stageToolDefinitions[request.stage];
   const text = { type: 'text', text: buildStageContext(request.stage, request.context) };
-  const content = request.stage === 'verify'
-    ? [{ type: 'image', source: { type: 'base64', media_type: request.image!.mediaType, data: request.image!.data } }, text]
-    : [text];
 
   try {
     const response = await fetchImpl(`${request.config.baseUrl.replace(/\/+$/, '')}/v1/messages`, {
@@ -106,7 +85,7 @@ export async function callStageLlm(request: CallStageRequest): Promise<StageLlmR
         system: buildStageSystemPrompt(request.stage),
         tools: [tool],
         tool_choice: { type: 'tool', name: tool.name },
-        messages: [{ role: 'user', content }],
+        messages: [{ role: 'user', content: [text] }],
       }),
       signal: controller.signal,
     });
@@ -146,7 +125,6 @@ export async function callStageLlm(request: CallStageRequest): Promise<StageLlmR
       usage: usedTokens,
       durationMs: Math.max(1, Math.round(performance.now() - started)),
       model: request.config.model,
-      imageSource: request.stage === 'verify' ? request.image?.source : undefined,
     };
   } catch (error) {
     // Node 环境下 fetch 中止抛出的 DOMException 不继承 Error，须按 name 判定。

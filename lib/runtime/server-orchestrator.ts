@@ -1,4 +1,4 @@
-import { callStageLlm, type LlmErrorCode, type StageImage, type StageLlmResult } from './llm-client';
+import { callStageLlm, type LlmErrorCode, type StageLlmResult } from './llm-client';
 import { readLlmConfig } from './llm-config';
 import { resolveStageFixture, runtimeScenarios } from './scenarios';
 import { advanceRun, nextAttempt, recordExecution } from './state-machine';
@@ -59,15 +59,13 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
   async executeStage(
     runId: string,
     stage: IncidentStage,
-    image?: StageImage,
   ): Promise<{ run: IncidentRun; execution: StageExecution }> {
-    return this.serialized(runId, () => this.executeStageLocked(runId, stage, image));
+    return this.serialized(runId, () => this.executeStageLocked(runId, stage));
   }
 
   private async executeStageLocked(
     runId: string,
     stage: IncidentStage,
-    image?: StageImage,
   ): Promise<{ run: IncidentRun; execution: StageExecution }> {
     const run = this.requireRun(runId);
     if (run.status === 'awaiting_approval') throw new Error('approval_required');
@@ -87,14 +85,13 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       stage,
       context: {
         incident: run.incident,
-        stageInput: fixture.input,
+        stageContext: fixture.context,
         priorOutputs,
         // 只有 contact 真正走完审批才声明 approved：误报短路直达 evaluate 时不得谎称已审批。
         approval: run.completedStages.includes('contact') ? 'approved' : undefined,
         // 重入时带上次结论：让模型基于新观测窗口重新判断，而不是复述旧结论。
         ...(attempt > 1 ? { attempt, previousAttempt: run.executions[stage]?.output } : {}),
       },
-      image,
     } as const;
     let result = await this.caller(request);
     // 重试与首调都计费：累计所有调用的 token，观测面板才不会系统性低估。
@@ -118,7 +115,7 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       decisionFactors: result.decisionFactors,
       events: [
         { id: `${run.id}-${stage}-start`, type: 'stage_started', at: now, label: `${fixture.title}开始`, detail: '服务端已构建最小阶段上下文。' },
-        { id: `${run.id}-${stage}-llm-start`, type: 'tool_call_started', at: now, label: stage === 'verify' ? 'Multimodal LLM' : 'Evidence LLM', detail: `调用 ${result.model}` },
+        { id: `${run.id}-${stage}-llm-start`, type: 'tool_call_started', at: now, label: 'Evidence LLM', detail: `调用 ${result.model}` },
         { id: `${run.id}-${stage}-llm-done`, type: 'tool_call_completed', at: now, label: '真实模型返回', detail: result.summary, durationMs: result.durationMs },
         { id: `${run.id}-${stage}-decision`, type: stage === 'contact' ? 'approval_required' : 'decision_ready', at: now, label: stage === 'contact' ? '等待人工审批' : '结构化决策完成', detail: result.summary },
       ],
@@ -133,7 +130,6 @@ export class ServerIncidentOrchestrator implements IncidentRuntime {
       },
       provider: 'real_llm',
       model: result.model,
-      imageSource: result.imageSource,
       costEstimated: false,
     };
     recordExecution(run, stage, execution);
