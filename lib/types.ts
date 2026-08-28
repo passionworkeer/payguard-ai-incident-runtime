@@ -38,4 +38,6 @@ export interface IncidentSummary {
   startedAt: string;
   duration: string;
   confidence: number;
+  // 对应演示场景：事故中心「进入处置演示」按行跳转到对应链路。
+  scenarioId: string;
 }
