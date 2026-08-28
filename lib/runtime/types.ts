@@ -94,13 +94,35 @@ export interface IncidentRun {
   humanReason?: string;
 }
 
+// 场景标准答案：评测判分（TP/TN/FP/FN 与根因命中）的对照基准。
+export interface GroundTruth {
+  isIncident: boolean;
+  severity: 'P0' | 'P1' | 'P2';
+  rootCause: string;
+  // 与 rootCause 等价的可接受表述：真实模型措辞不同不判错。
+  acceptableCauses: string[];
+  // 关键词全部命中也算 Top-1 命中：容忍模型自由措辞。
+  rootCauseKeywords: string[];
+  recovered: boolean;
+}
+
 export interface RuntimeScenario {
   id: string;
+  // 场景选择器短名与一句话讲解。
+  label: string;
+  summary: string;
+  // 事故中心对应行的事故 ID：双向跳转对齐。
+  incidentId: string;
+  // verify 阶段的监控截图（真实模式多模态输入）。
+  monitorImage: string;
+  // mock 模式的预期执行路径（重入阶段重复出现）；真实模式路径由模型输出决定。
+  expectedPath: IncidentStage[];
   incident: IncidentSummaryData;
   stages: Record<IncidentStage, StageExecution>;
   // 重入阶段（如恢复判断第 2 次）的替换 fixture：按 attempt 顺序取用，超界复用最后一个。
   // 真实模式尤其依赖：不换观测窗口输入，模型会一直判「未稳定」直到触顶转人工。
   retryStages?: Partial<Record<IncidentStage, StageExecution[]>>;
+  groundTruth: GroundTruth;
 }
 
 export interface IncidentRuntime {

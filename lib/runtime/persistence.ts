@@ -1,4 +1,4 @@
-import { runtimeScenarios } from './scenario';
+import { runtimeScenarios } from './scenarios';
 import { stageOrder, type IncidentRun, type RunStatus } from './types';
 
 export const STORAGE_KEY = 'payguard.mock-run.v1';

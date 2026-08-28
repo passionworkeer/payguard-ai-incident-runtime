@@ -1,6 +1,6 @@
 import { callStageLlm, type LlmErrorCode, type StageImage, type StageLlmResult } from './llm-client';
 import { readLlmConfig } from './llm-config';
-import { resolveStageFixture, runtimeScenarios } from './scenario';
+import { resolveStageFixture, runtimeScenarios } from './scenarios';
 import { advanceRun, nextAttempt, recordExecution } from './state-machine';
 import { type IncidentRun, type IncidentRuntime, type IncidentStage, type StageExecution } from './types';
 

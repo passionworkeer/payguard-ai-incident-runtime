@@ -129,4 +129,80 @@ describe('MockIncidentRuntime', () => {
       'evaluate',
     ]);
   });
+
+  it('short-circuits false alarms and skips the middle stages', async () => {
+    // 误报路径：verify 判 false → 中间 4 阶段全部跳过 → 直接进 evaluate。
+    const runtime = new MockIncidentRuntime();
+    const created = await runtime.createIncident('false-alarm');
+    const verified = await runtime.executeStage(created.id, 'verify');
+    const evaluated = await runtime.executeStage(created.id, 'evaluate');
+
+    expect(verified.execution.output.isIncident).toBe(false);
+    expect(evaluated.run.status).toBe('completed');
+    expect(evaluated.run.currentStage).toBe('evaluate');
+    expect(evaluated.run.completedStages).toEqual(['verify', 'evaluate']);
+    expect(evaluated.run.skippedStages).toEqual(['locate', 'contact', 'escalate', 'recover']);
+    // 跳过的阶段不计入 completedStages 也不在 executions 里；attempts 流水仍包含跳过的尝试（如有）。
+    expect(evaluated.run.executions.locate).toBeUndefined();
+  });
+
+  it('re-enters recover with a fresh window when the first attempt is unstable', async () => {
+    // 渠道恢复：recover 第 1 次 recovered=false → 停留 recover，第二次取 retryStages 新窗口 → 通过。
+    const runtime = new MockIncidentRuntime();
+    const created = await runtime.createIncident('channel-rebound');
+    await runtime.executeStage(created.id, 'verify');
+    await runtime.executeStage(created.id, 'locate');
+    await runtime.executeStage(created.id, 'contact');
+    await runtime.approveAction(created.id, (await runtime.getRun(created.id)).pendingApproval!.id);
+    await runtime.executeStage(created.id, 'escalate');
+
+    const first = await runtime.executeStage(created.id, 'recover');
+    expect(first.run.currentStage).toBe('recover');
+    expect(first.run.completedStages).toEqual(['verify', 'locate', 'contact', 'escalate']);
+    expect(first.run.status).toBe('running');
+    expect(first.execution.output.recovered).toBe(false);
+    expect(first.run.stageAttempts).toEqual({ verify: 1, locate: 1, contact: 1, escalate: 1, recover: 1 });
+    expect(first.run.attempts?.filter((exec) => exec.stage === 'recover')).toHaveLength(1);
+
+    const second = await runtime.executeStage(created.id, 'recover');
+    // 第 2 次输入是 retryStages[0]（新窗口、recovered=true）→ 推进到 evaluate。
+    expect(second.execution.output.recovered).toBe(true);
+    expect(second.run.currentStage).toBe('evaluate');
+    expect(second.run.stageAttempts?.recover).toBe(2);
+    // 流水追加：累计 2 次 recover；executions 仍指向最新一次（UI 不重复渲染）。
+    expect(second.run.attempts?.filter((exec) => exec.stage === 'recover')).toHaveLength(2);
+    expect(second.run.executions.recover).toStrictEqual(second.execution);
+  });
+
+  it('cannot reach needs_human in mock mode once retryStages converges to recovered=true', async () => {
+    // mock fixture 的设计意图是「演示闭环」：retryStages[0] 提供 recovered=true，
+    // 因此第 2 次就推进 evaluate；触顶 needs_human 仅在真实模型持续判未稳定时出现。
+    // 这里断言 mock 模式的稳定语义，避免未来无意把 retryStages 改坏。
+    const runtime = new MockIncidentRuntime();
+    const created = await runtime.createIncident('channel-rebound');
+    await runtime.executeStage(created.id, 'verify');
+    await runtime.executeStage(created.id, 'locate');
+    await runtime.executeStage(created.id, 'contact');
+    await runtime.approveAction(created.id, (await runtime.getRun(created.id)).pendingApproval!.id);
+    await runtime.executeStage(created.id, 'escalate');
+
+    await runtime.executeStage(created.id, 'recover');
+    const converged = await runtime.executeStage(created.id, 'recover');
+    expect(converged.run.status).toBe('running');
+    expect(converged.run.currentStage).toBe('evaluate');
+    expect(converged.run.stageAttempts?.recover).toBe(2);
+  });
+
+  it('does not count an executed-but-unapproved contact as a retry', async () => {
+    // 反向防回归：contact 即使执行了，若未审批通过就不算重试。
+    const { runtime, runId } = await runtimeAtContact();
+    const paused = await runtime.getRun(runId);
+    expect(paused.completedStages).not.toContain('contact');
+    // 重试定义 = 每个阶段执行次数 - 1；contact 执行了 1 次 → 0 次重试。
+    const expectedRetries = Object.values(paused.stageAttempts ?? {}).reduce(
+      (sum, n) => sum + Math.max(0, (n ?? 0) - 1),
+      0,
+    );
+    expect(expectedRetries).toBe(0);
+  });
 });

@@ -1,4 +1,4 @@
-import { resolveStageFixture, runtimeScenarios } from './scenario';
+import { resolveStageFixture, runtimeScenarios } from './scenarios';
 import { advanceRun, nextAttempt, recordExecution } from './state-machine';
 import {
   type IncidentRun,
