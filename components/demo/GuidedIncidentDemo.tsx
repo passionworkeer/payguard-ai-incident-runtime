@@ -250,13 +250,21 @@ export default function GuidedIncidentDemo({
       {(() => {
         const executedCount = Object.keys(run.executions).length;
         if (executedCount === 0) return null;
+        // 真实模式由服务端跑 LLM，计费策略本期不固化（依赖 gateway 返回），用「未估算」明示，
+        // mock 模式按 fixture 累加并标「（估）」，区分两条链路。空执行数直接不显示 totals。
         const costEstimated = Object.values(run.executions).some((item) => item.costEstimated);
+        const isReal = Object.values(run.executions).some((item) => item.provider === 'real_llm');
+        const costNode = isReal && demo.totals.costYuan === 0
+          ? <span>成本 <b>未估算</b></span>
+          : demo.totals.costYuan > 0
+            ? <span>成本 <b>¥{demo.totals.costYuan.toFixed(2)}{costEstimated ? '（估）' : ''}</b></span>
+            : null;
         return (
           <div className="demo-totals" aria-label="全链路累计指标">
             <span>已执行 <b>{executedCount}/6</b> 步</span>
             <span>总耗时 <b>{demo.totals.latencyMs >= 1000 ? `${(demo.totals.latencyMs / 1000).toFixed(1)}s` : `${demo.totals.latencyMs}ms`}</b></span>
             {demo.totals.tokens > 0 ? <span>tokens <b>{demo.totals.tokens.toLocaleString('zh-CN')}</b></span> : null}
-            {demo.totals.costYuan > 0 ? <span>成本 <b>¥{demo.totals.costYuan.toFixed(2)}{costEstimated ? '（估）' : ''}</b></span> : null}
+            {costNode}
             <span>工具调用 <b>{demo.totals.toolCalls}</b> 次</span>
             <span>证据 <b>{demo.totals.evidence}</b> 条</span>
           </div>

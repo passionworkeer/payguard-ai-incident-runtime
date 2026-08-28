@@ -162,6 +162,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(23, 92, 255,
 .demo-step-sub { margin: -6px 0 0; color: #748198; font-size: 13px; line-height: 1.7; }
 .demo-step-provider { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 .provider-badge { border: 1px solid #ecc39a; background: var(--orange2); padding: 3px 6px; color: var(--orange); font: 800 10px var(--font-mono); letter-spacing: .06em; white-space: nowrap; }
+/* mock 徽标：用蓝底区分 REAL LLM 橙底，避免招聘方混淆两条推理链路。 */
+.provider-badge.mock { border-color: #b9cbff; background: var(--blue2); color: var(--blue); }
+/* 恢复判断重入提示：复用 demo-why 但加左侧红色色块强调「重新观察」。 */
+.demo-why-rebound { margin-top: 6px; border-left: 3px solid var(--red); padding-left: 9px; color: #8b2929; }
+/* 商户证书场景 contact 的指导步骤：有序列表 + 等宽序号，便于阅读。 */
+.demo-contact-steps { margin: 6px 0 0; padding-left: 22px; color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.demo-contact-steps li + li { margin-top: 3px; }
 .demo-step-model { color: #58667e; font: 600 11px var(--font-mono); }
 .demo-step-image { color: var(--text-muted); font-size: 11px; }
 .complete-chip { display: inline-flex; align-items: center; min-height: 48px; border: 1px solid #bfe3d4; border-left: 4px solid var(--green); background: linear-gradient(90deg, var(--green2), rgba(233, 248, 242, 0) 80%); padding: 0 18px; color: var(--green); font-size: 13px; font-weight: 700; }

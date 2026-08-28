@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { IncidentRun, IncidentStage, StageExecution } from '../../lib/runtime/types';
+import { stageOrder, type IncidentRun, type IncidentStage, type StageExecution } from '../../lib/runtime/types';
 import { stageNames } from './StepRail';
 
 // 输入键 → 中文标签。mock fixture 与 llm 模式共用同一份 fixture.input（服务端 ...clone(fixture) 保留），
@@ -25,9 +25,32 @@ const inputLabels: Record<string, string> = {
   baseline: '对比基线',
   labelSource: '标注来源',
   promptVersion: 'Prompt 版本',
+  // 4 场景新增键（保持向后兼容：旧 fixture 字段全部保留）。
+  trafficGrowth: '流量涨幅',
+  throttleRatio: '限流占比',
+  promotionCalendar: '大促日历',
+  signFailureGrowth: '签名失败倍数',
+  errorCode: '错误码占比',
+  causeOwner: '根因归属',
+  techLevel: '技术等级',
+  channelSuccessRate: '分渠道成功率',
+  attemptNote: '本轮备注',
+  branch: '分支',
+  channelStatus: '渠道方通报',
+  residualRisk: '残余风险',
+  stableWindows: '稳定窗口',
 };
 
 function formatValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(' / ');
+  if (typeof value === 'number') return value.toString();
+  return String(value);
+}
+
+// 数字专用：mock fixture 中 stableWindows 是 number，旧实现误走 list → 退化为「,」分隔。
+function formatStableWindows(value: unknown): string {
+  if (typeof value === 'number') return `${value} 个`;
+  if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map((item) => String(item)).join(' / ');
   return String(value);
 }
@@ -41,34 +64,39 @@ function outputRows(stage: IncidentStage, output: Record<string, unknown>): { la
   const rows: { label: string; value: string }[] = [];
   const str = (value: unknown) => (typeof value === 'string' && value.trim() !== '' ? value : undefined);
   const list = (value: unknown) =>
-    Array.isArray(value) && value.length > 0 ? value.filter((item) => typeof item === 'string' && item !== '').join(' · ') : undefined;
+    Array.isArray(value) && value.length > 0 ? value.filter((item) => (typeof item === 'string' || typeof item === 'number') && String(item) !== '').map(String).join(' · ') : undefined;
   const push = (label: string, value: string | undefined) => {
     if (value !== undefined) rows.push({ label, value });
   };
   switch (stage) {
     case 'verify':
       push('故障判定', output.isIncident === true ? '真实故障' : output.isIncident === false ? '非真实故障' : undefined);
+      push('误报原因', str(output.falseAlarmReason));
       push('影响范围', str(output.impactScope) ?? str(output.affectedScope));
       push('监控图表发现', list(output.visualFindings));
       break;
     case 'locate':
       push('Top-1 根因', str(output.topCause));
       push('候选根因', list(output.alternatives));
+      push('根因归属', str(output.causeOwner) === 'merchant' ? '商户侧' : str(output.causeOwner) === 'channel' ? '渠道侧' : str(output.causeOwner));
       push('证据引用', list(output.evidenceRefs));
       push('建议动作', str(output.recommendedAction) ?? list(output.recommendedActions));
       break;
     case 'contact':
       push('触达渠道', list(output.channels) ?? str(output.channel));
+      push('沟通语气', str(output.tone) === 'reassurance' ? '安抚型' : str(output.tone) === 'guidance' ? '指导型' : str(output.tone));
+      push('商户行动', str(output.actionLinkLabel) ?? str(output.actionLink));
       break;
     case 'escalate':
       push('工单', str(output.ticketTitle) ?? str(output.ticketId));
       push('升级对象', list(output.teams));
+      push('升级级别', str(output.escalationLevel));
       push('SLA', str(output.sla));
       push('升级原因', str(output.escalationReason));
       break;
     case 'recover':
       push('恢复判定', output.recovered === true ? '已稳定恢复' : output.recovered === false ? '未稳定' : undefined);
-      push('稳定窗口', list(output.stableWindows));
+      push('稳定窗口', formatStableWindows(output.stableWindows));
       push('残余风险', str(output.residualRisk));
       push('观察建议', str(output.observationAdvice));
       break;
@@ -88,13 +116,14 @@ function formatDuration(ms: number): string {
 }
 
 // 把每个阶段的 output 折叠成「一句话结论」：让招聘方一眼抓住结果，细节在三区里展开。
+// 置信度由独立 chip 承担，避免 headline 内重复出现。
 function headlineFor(stage: IncidentStage, execution: StageExecution): string {
   const out = execution.output as Record<string, unknown>;
   switch (stage) {
     case 'verify': {
       const confirmed = out.isIncident === true;
       const severity = String(out.severity ?? '');
-      return confirmed ? `真实 ${severity} 故障，置信度 ${execution.metrics.confidence}%` : '未识别为真实故障';
+      return confirmed ? `真实 ${severity} 故障` : '未识别为真实故障';
     }
     case 'locate':
       return typeof out.topCause === 'string' ? `Top-1 根因：${out.topCause}` : '根因待定';
@@ -122,6 +151,14 @@ function KvRows({ rows }: { rows: { label: string; value: string }[] }) {
       ))}
     </div>
   );
+}
+
+// guidanceSteps 是商户证书场景 contact 的新字段：渲染成有序步骤而非塞进 KV。
+function renderGuidanceSteps(out: Record<string, unknown>): string[] | null {
+  const steps = out.guidanceSteps;
+  if (!Array.isArray(steps)) return null;
+  const valid = steps.filter((step) => typeof step === 'string' && step.trim() !== '');
+  return valid.length > 0 ? valid : null;
 }
 
 export function StageWorkspace({
@@ -156,8 +193,10 @@ export function StageWorkspace({
   const outputs = outputRows(stage, out);
   const toolEvents = execution.events.filter((event) => event.type !== 'stage_started');
   const tokens = execution.metrics.inputTokens + execution.metrics.outputTokens;
+  // 兼容两种链路字段：scenarios/ 用 actionLinkLabel + 数组 actions；旧 llm-schemas 用 actionLink 字符串数组。
   const contactMessage = typeof out.message === 'string' ? out.message : null;
-  const contactActions = Array.isArray(out.actionLink) ? (out.actionLink as string[]) : null;
+  const contactActionLinks = Array.isArray(out.actionLink) ? (out.actionLink as string[]) : null;
+  const guidanceSteps = renderGuidanceSteps(out);
   const designNotes = (
     [
       ['放行', execution.gate],
@@ -173,6 +212,8 @@ export function StageWorkspace({
         STEP {stageOrderIndex(stage)} · {stageNames[stage]}
         <h2 className="demo-step-result">{stageNames[stage]}结果</h2>
         <span className="demo-step-provider">
+          {/* MOCK 徽标：mock 模式打标，方便招聘方一眼区分；真实模式走原有 REAL LLM 徽标 */}
+          {execution.provider === 'mock' ? <span className="provider-badge mock">MOCK</span> : null}
           {execution.provider === 'real_llm' ? (
             <>
               <span className="provider-badge real">REAL LLM</span>
@@ -187,8 +228,16 @@ export function StageWorkspace({
           </span>
         </span>
       </div>
-      <h3 className="demo-headline">{lead}{execution.metrics.confidence !== undefined ? <span className="demo-confidence">置信度 {execution.metrics.confidence}%</span> : null}</h3>
+      <h3 className="demo-headline">
+        {lead}
+        {execution.metrics.confidence !== undefined ? <span className="demo-confidence">置信度 {execution.metrics.confidence}%</span> : null}
+      </h3>
       <p className="demo-why">{execution.goal}</p>
+
+      {/* 恢复判断重入提示：第 2+ 轮通过 attemptNote 显式告诉招聘方「为什么再来一次」。 */}
+      {stage === 'recover' && typeof out.attemptNote === 'string' && out.attemptNote.trim() !== '' ? (
+        <p className="demo-why demo-why-rebound">{out.attemptNote}</p>
+      ) : null}
 
       <div className="demo-zone-grid">
         <section className="demo-zone" aria-label={`${stageNames[stage]}输入`}>
@@ -229,8 +278,15 @@ export function StageWorkspace({
           <div className="demo-contact-preview">
             <strong className="demo-contact-subject">{typeof out.subject === 'string' ? out.subject : '触达预览'}</strong>
             <p className="demo-contact-message">{contactMessage}</p>
-            {contactActions ? (
-              <div className="demo-contact-actions">{contactActions.map((action, i) => <span key={i} className="demo-contact-action">· {action}</span>)}</div>
+            {guidanceSteps ? (
+              <ol className="demo-contact-steps">
+                {guidanceSteps.map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ol>
+            ) : null}
+            {contactActionLinks ? (
+              <div className="demo-contact-actions">{contactActionLinks.map((action, i) => <span key={i} className="demo-contact-action">· {action}</span>)}</div>
             ) : null}
           </div>
         ) : null}
@@ -255,5 +311,5 @@ export function StageWorkspace({
 }
 
 function stageOrderIndex(stage: IncidentStage): number {
-  return ['verify', 'locate', 'contact', 'escalate', 'recover', 'evaluate'].indexOf(stage) + 1;
+  return stageOrder.indexOf(stage) + 1;
 }
