@@ -8,13 +8,21 @@ describe('dashboard navigation', () => {
     render(<Dashboard />);
 
     expect(await screen.findByRole('heading', { name: '支付接口超时率突增' })).toBeVisible();
-    for (const item of ['处置演示', '事故中心', '流程分析', 'AI 评测']) {
+    // 运营总览是 P4 引入的导航项（北极星/一级/护栏三层指标 + MTTR 分解），保留为功能模块。
+    for (const item of ['处置演示', '事故中心', '运营总览', '流程分析', 'AI 评测']) {
       expect(screen.getByRole('button', { name: new RegExp(item) })).toBeVisible();
     }
-    for (const removed of ['数据集', 'Prompt 版本', '系统设置', '运营总览']) {
+    for (const removed of ['数据集', 'Prompt 版本', '系统设置']) {
       expect(screen.queryByRole('button', { name: removed })).not.toBeInTheDocument();
     }
     expect(screen.queryByText('AI 自动处置率')).not.toBeInTheDocument();
+  });
+
+  it('opens the operations overview placeholder', async () => {
+    const user = userEvent.setup();
+    render(<Dashboard />);
+    await user.click(screen.getByRole('button', { name: '运营总览' }));
+    expect(await screen.findByRole('heading', { name: '运营总览' })).toBeVisible();
   });
 
   it('opens the flow analytics workspace', async () => {

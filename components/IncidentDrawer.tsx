@@ -7,7 +7,7 @@ import type { IncidentSummary } from '../lib/types';
 interface IncidentDrawerProps {
   incident: IncidentSummary;
   onClose: () => void;
-  onStartDemo?: () => void;
+  onStartDemo?: (scenarioId: string) => void;
 }
 
 // 五阶段 Agent Trace 展示的是处置管线本身的示例链路，与具体事故无关。
@@ -42,7 +42,8 @@ export default function IncidentDrawer({ incident, onClose, onStartDemo }: Incid
     };
   }, [onClose]);
 
-  // 黄金场景（处置演示对应的事故）才有完整的合成证据链叙事；其余事故只展示真实字段。
+  // 现在四行事故都对应独立场景；「黄金场景」仅用于在抽屉中展示完整合成证据链。
+  // 保留 isGolden 概念以便逐步迁移：当前仍只对 INC-20260825-031 展开证据链，其它行显示档案快照。
   const isGolden = incident.id === 'INC-20260825-031';
   const severityTone = incident.severity === 'P0' ? '' : incident.severity === 'P1' ? ' tone-warning' : ' tone-info';
 
@@ -68,6 +69,6 @@ export default function IncidentDrawer({ incident, onClose, onStartDemo }: Incid
         <section className="drawer-section"><div className="drawer-section-title"><div><MessageSquareText size={15}/><span>商户触达预览</span></div><small>站内信 · 待审核</small></div><div className="message-preview"><p>您好，我们监测到贵司支付接口自 14:23 起出现大面积超时，当前支付成功率下降至 71.36%。初步定位为 API 网关连接池耗尽，请优先检查连接池上限及 14:19 发布变更。</p><div><span>预计影响：¥286.4 万</span><span>建议 10 分钟内响应</span></div></div></section>
       ) : null}
     </div>
-    <footer className="drawer-footer"><span>所有操作均为本地模拟</span><div><button className="secondary-button" onClick={onClose}>关闭</button>{isGolden ? <button className="primary-button" onClick={onStartDemo ?? onClose}><Send size={14}/>进入处置演示</button> : <button className="primary-button" onClick={onStartDemo ?? onClose}><Send size={14}/>进入黄金链路</button>}</div></footer>
+    <footer className="drawer-footer"><span>所有操作均为本地模拟</span><div><button className="secondary-button" onClick={onClose}>关闭</button><button className="primary-button" onClick={() => onStartDemo?.(incident.scenarioId) ?? onClose()}><Send size={14}/>{isGolden ? '进入处置演示' : '进入演示链路'}</button></div></footer>
   </aside></div>;
 }

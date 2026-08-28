@@ -11,10 +11,12 @@ const stageNames: Record<IncidentStage, string> = {
 
 export { stageNames };
 
-// 进度条上每段的状态：决定圆点配色 + 文案。空状态/审批/转人工 各自独立，便于一眼定位当前卡点。
-type StepIndicatorState = 'pending' | 'current' | 'complete' | 'pending_approval' | 'needs_human';
+// 进度条上每段的状态：决定圆点配色 + 文案。空状态/审批/转人工/跳过 各自独立，便于一眼定位当前卡点。
+type StepIndicatorState = 'pending' | 'current' | 'complete' | 'pending_approval' | 'needs_human' | 'skipped';
 
 function statusForStage(run: IncidentRun, stage: IncidentStage): StepIndicatorState {
+  // 跳过优先于其他状态：误报短路后中间 4 步虽然没执行也不应被错误归为「待执行」。
+  if (run.skippedStages?.includes(stage)) return 'skipped';
   const executed = Boolean(run.executions[stage]);
   const completed = run.completedStages.includes(stage);
   if (run.status === 'awaiting_approval' && run.currentStage === stage) return 'pending_approval';
@@ -38,11 +40,11 @@ export function StepProgress({
     <nav className="demo-progress" aria-label="处置进度">
       {stageOrder.map((stage, index) => {
         const state = statusForStage(run, stage);
-        const executed = state !== 'pending';
+        const executed = state === 'complete' || state === 'current' || state === 'pending_approval' || state === 'needs_human';
         const isCurrent = selectedStage === stage;
         const labelClass = `demo-progress-step ${state !== 'pending' && isCurrent ? 'is-current' : ''} is-${state.replace('_', '-')}`;
-        const dotSymbol = state === 'complete' ? '✓' : state === 'pending_approval' ? '!' : state === 'needs_human' ? '⏸' : String(index + 1);
-        const statusText = state === 'complete' ? '已完成' : state === 'current' ? '当前步骤' : state === 'pending_approval' ? '待审批' : state === 'needs_human' ? '已转人工' : '待执行';
+        const dotSymbol = state === 'complete' ? '✓' : state === 'pending_approval' ? '!' : state === 'needs_human' ? '⏸' : state === 'skipped' ? '–' : String(index + 1);
+        const statusText = state === 'complete' ? '已完成' : state === 'current' ? '当前步骤' : state === 'pending_approval' ? '待审批' : state === 'needs_human' ? '已转人工' : state === 'skipped' ? '已跳过' : '待执行';
         return (
           <span key={stage} style={{ display: 'inline-flex', alignItems: 'center' }}>
             <button

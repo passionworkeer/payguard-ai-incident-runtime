@@ -256,6 +256,12 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(23, 92, 255,
 .runtime-mode-switch button + button { border-left: 1px solid var(--line); }
 .runtime-mode-switch button[aria-pressed='true'] { background: var(--blue); color: #fff; font-weight: 700; }
 .runtime-mode-switch button:disabled { cursor: not-allowed; opacity: .45; }
+/* 演示场景选择器：左侧 label + 复用 .runtime-mode-switch 按钮组。 */
+.scenario-picker { display: flex; align-items: center; gap: 10px; margin: 12px 0 14px; flex-wrap: wrap; }
+.scenario-picker-label { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.scenario-picker-buttons button { font-size: 12px; }
+/* 触顶转人工原因说明：用红框 + 单行文案，让招聘方看见状态机在什么情况下需要人工兜底。 */
+.demo-human-reason { margin: 0 0 14px; border: 1px solid #ecc0b6; border-left: 4px solid var(--red); background: linear-gradient(90deg, var(--red2), rgba(254, 226, 226, 0) 80%); padding: 9px 12px; color: #8b2929; font-size: 12px; }
 .llm-mode-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .llm-mode-flag { border: 1px solid #ecc39a; background: var(--orange2); padding: 3px 7px; color: var(--orange); font: 800 11px var(--font-mono); letter-spacing: .08em; white-space: nowrap; }
 .llm-badge-multimodal { border: 1px solid #d8ccf7; background: var(--violet2); padding: 3px 7px; color: var(--violet); font: 700 10px var(--font-mono); white-space: nowrap; }

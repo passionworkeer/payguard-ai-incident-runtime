@@ -8,8 +8,10 @@ import { MockIncidentRuntime } from '../../lib/runtime/mock-runtime';
 import { clearMockRun } from '../../lib/runtime/persistence';
 import { imageDetailLabel, imageMediaTypeError, readImageBase64 } from '../../lib/runtime/image-file';
 import type { IncidentRun, IncidentRuntime, IncidentStage } from '../../lib/runtime/types';
+import { plannedStageCount, retryCount } from '../../lib/runtime/state-machine';
 import { IncidentImageInput, type VerifyImageMeta } from './IncidentImageInput';
 import { RuntimeModeSwitch, type DemoRuntimeMode } from './RuntimeModeSwitch';
+import { ScenarioPicker } from './ScenarioPicker';
 import { StageWorkspace } from './StageWorkspace';
 import { StepProgress } from './StepRail';
 import { useIncidentDemo } from './useIncidentDemo';
@@ -22,6 +24,12 @@ const actionLabels: Record<IncidentStage, string> = {
   recover: '下一步：判断是否恢复',
   evaluate: '最后一步：回流评测样本',
 };
+
+// 误报短路：第 2 步直接回流样本，差异化提示文案。
+const falseAlarmNextLabel = '下一步：回流误报样本到数据集';
+// 恢复重入：第 2 次需要「新观测窗口」，明确告知招聘方为什么再来一次。
+const reboundRetryLabel = '再次判断是否恢复（上一轮回弹）';
+const reboundFirstLabel = '下一步：判断是否恢复（首次）';
 
 const builtInImageUrl = '/mock/merchant-monitor.png';
 const builtInImageMeta: VerifyImageMeta = { name: '内置合成监控截图', detail: 'PNG · 合成监控面板' };
@@ -40,12 +48,14 @@ export default function GuidedIncidentDemo({
   initialLlmImage,
   persist = true,
   onRunChange,
+  initialScenarioId = 'gateway-timeout',
 }: {
   runtime?: IncidentRuntime;
   llmRuntime?: ConfigurableLlmRuntime;
   initialLlmImage?: StageImage;
   persist?: boolean;
   onRunChange?: (run: IncidentRun) => void;
+  initialScenarioId?: string;
 }) {
   const [ownedRuntime] = useState(() => runtime ?? new MockIncidentRuntime());
   // 入口优先真实模型：有 llmRuntime 就默认真实模式；配置解析出「未配置」时再自动回退（见下方 config effect）。
@@ -56,9 +66,11 @@ export default function GuidedIncidentDemo({
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageReloadKey, setImageReloadKey] = useState(0);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  // 当前演示场景：Dashboard 用它驱动「进入处置演示」按行跳转；GuidedIncidentDemo 自己也提供切换器。
+  const [scenarioId, setScenarioId] = useState<string>(initialScenarioId);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const activeRuntime = mode === 'llm' && llmRuntime ? llmRuntime : ownedRuntime;
-  const demo = useIncidentDemo(activeRuntime, persist);
+  const demo = useIncidentDemo(activeRuntime, persist, scenarioId);
   const run = demo.run;
   const locked = demo.busy && run !== null;
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -141,6 +153,17 @@ export default function GuidedIncidentDemo({
     if (persist && typeof window !== 'undefined') clearMockRun(window.localStorage);
     setMode(next);
   }, [llmRuntime, locked, mode, persist, run, verifyImage]);
+
+  // 切换演示场景：同样需确认丢进度，避免误点清掉已演示链路。
+  const switchScenario = useCallback((next: string) => {
+    if (locked || next === scenarioId) return;
+    const hasProgress = !!run && (run.completedStages.length > 0 || run.status === 'awaiting_approval' || run.status === 'needs_human');
+    if (hasProgress && typeof window !== 'undefined' && !window.confirm(`切换演示场景将丢弃当前 ${run.completedStages.length} 步进度。确认继续？`)) {
+      return;
+    }
+    if (persist && typeof window !== 'undefined') clearMockRun(window.localStorage);
+    setScenarioId(next);
+  }, [locked, persist, run, scenarioId]);
 
   // 浮层外点击关闭：避免演示中浮层挡住主步骤。
   useEffect(() => {
@@ -229,6 +252,12 @@ export default function GuidedIncidentDemo({
   const primaryActionLabel = (() => {
     if (verifyImagePending && !demo.busy) return '等待核验图片就绪…';
     if (demo.busy) return mode === 'llm' ? `真实模型正在执行… ${elapsedSecLabel ?? ''}`.trim() : 'AI 正在执行…';
+    // 误报短路：verify 已经判非故障，下一步是「回流误报样本」。
+    if (scenarioId === 'false-alarm' && run.currentStage === 'evaluate') return falseAlarmNextLabel;
+    // 渠道恢复重入：recover 已执行 1 次且当前仍在 recover → 强调「再次判断」。
+    if (scenarioId === 'channel-rebound' && run.currentStage === 'recover') {
+      return (run.stageAttempts?.recover ?? 0) >= 1 ? reboundRetryLabel : reboundFirstLabel;
+    }
     return actionLabels[run.currentStage];
   })();
 
@@ -243,6 +272,8 @@ export default function GuidedIncidentDemo({
       </header>
       {unconfiguredNotice}
 
+      <ScenarioPicker value={scenarioId} onChange={switchScenario} />
+
       <StepProgress run={run} selectedStage={demo.selectedStage} onSelect={demo.selectHistory} />
 
       <StageWorkspace run={run} stage={demo.selectedStage} execution={execution} />
@@ -250,6 +281,9 @@ export default function GuidedIncidentDemo({
       {(() => {
         const executedCount = Object.keys(run.executions).length;
         if (executedCount === 0) return null;
+        // 分母来自 plannedStageCount：误报短路 6→2，否则为 6；恢复重入不改变分母（重试算额外成本而非额外步骤）。
+        const planned = plannedStageCount(run);
+        const retries = retryCount(run);
         // 真实模式由服务端跑 LLM，计费策略本期不固化（依赖 gateway 返回），用「未估算」明示，
         // mock 模式按 fixture 累加并标「（估）」，区分两条链路。空执行数直接不显示 totals。
         const costEstimated = Object.values(run.executions).some((item) => item.costEstimated);
@@ -261,7 +295,7 @@ export default function GuidedIncidentDemo({
             : null;
         return (
           <div className="demo-totals" aria-label="全链路累计指标">
-            <span>已执行 <b>{executedCount}/6</b> 步</span>
+            <span>已执行 <b>{executedCount}/{planned}</b> 步{retries > 0 ? ` · 恢复重试 ${retries} 次` : ''}</span>
             <span>总耗时 <b>{demo.totals.latencyMs >= 1000 ? `${(demo.totals.latencyMs / 1000).toFixed(1)}s` : `${demo.totals.latencyMs}ms`}</b></span>
             {demo.totals.tokens > 0 ? <span>tokens <b>{demo.totals.tokens.toLocaleString('zh-CN')}</b></span> : null}
             {costNode}
@@ -270,6 +304,10 @@ export default function GuidedIncidentDemo({
           </div>
         );
       })()}
+
+      {needsHuman && run.humanReason ? (
+        <p className="demo-human-reason" role="status">人工介入原因：{run.humanReason}</p>
+      ) : null}
 
       <div className="demo-cta-row">
         <button type="button" className="demo-cta-secondary" onClick={demo.reset} disabled={demo.busy}>重置演示</button>

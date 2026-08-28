@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { clearMockRun, loadMockRun, saveMockRun } from '../../lib/runtime/persistence';
 import type { IncidentRun, IncidentRuntime, IncidentStage } from '../../lib/runtime/types';
 
-export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
+export function useIncidentDemo(runtime: IncidentRuntime, persist = true, scenarioId: string = 'gateway-timeout') {
   const [run, setRun] = useState<IncidentRun | null>(null);
   const [selectedStage, setSelectedStage] = useState<IncidentStage>('verify');
   const [busy, setBusy] = useState(false);
@@ -36,9 +36,9 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
             restored = null;
           }
         }
-        const initial = restored
-          ? runtime.restoreRun?.(restored) ?? await runtime.getRun(restored.id).catch(() => runtime.createIncident('gateway-timeout'))
-          : await runtime.createIncident('gateway-timeout');
+        const initial = restored && restored.scenarioId === scenarioId
+          ? runtime.restoreRun?.(restored) ?? await runtime.getRun(restored.id).catch(() => runtime.createIncident(scenarioId))
+          : await runtime.createIncident(scenarioId);
         if (active) {
           store(initial);
           setSelectedStage(initial.currentStage);
@@ -53,7 +53,7 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
     return () => {
       active = false;
     };
-  }, [persist, runtime, store]);
+  }, [persist, runtime, store, scenarioId]);
 
   const execute = useCallback(async () => {
     if (!run || busy) return;
@@ -120,7 +120,9 @@ export function useIncidentDemo(runtime: IncidentRuntime, persist = true) {
   );
 
   const totals = useMemo(() => {
-    const executions = run ? Object.values(run.executions) : [];
+    // 用 attempts 流水而不仅仅是 executions：恢复重入会执行多次 recover，
+    // 若只看 executions 会低估 token / 工具调用次数，metrics 面板失真。
+    const executions = run ? (run.attempts && run.attempts.length > 0 ? run.attempts : Object.values(run.executions)) : [];
     return executions.reduce(
       (sum, execution) => ({
         latencyMs: sum.latencyMs + execution.metrics.latencyMs,

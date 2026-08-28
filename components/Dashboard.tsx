@@ -1,6 +1,6 @@
 'use client';
 
-import { BellRing, BrainCircuit, ChevronRight, FlaskConical, Menu, Network, PlayCircle, Sparkles, X } from 'lucide-react';
+import { BarChart3, BellRing, BrainCircuit, ChevronRight, FlaskConical, LayoutDashboard, Menu, Network, PlayCircle, Sparkles, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { createEvaluationSample, type EvaluationSample } from '../lib/runtime/evaluation';
 import { LlmIncidentRuntime } from '../lib/runtime/llm-runtime';
@@ -10,10 +10,12 @@ import { EvaluationView, FlowAnalyticsView } from './AnalyticsViews';
 import GuidedIncidentDemo from './demo/GuidedIncidentDemo';
 import IncidentsView from './IncidentsView';
 
-type ViewId = 'demo' | 'incidents' | 'flow' | 'evaluation';
+type ViewId = 'demo' | 'overview' | 'incidents' | 'flow' | 'evaluation';
 
 const navItems = [
   { id: 'demo' as const, label: '处置演示', icon: PlayCircle },
+  // 运营总览：北极星/一级/护栏三层指标 + MTTR 分解 + 原始告警流，定位全链路质量大盘。
+  { id: 'overview' as const, label: '运营总览', icon: LayoutDashboard },
   { id: 'incidents' as const, label: '事故中心', icon: BellRing, count: incidentSummaries.length },
   { id: 'flow' as const, label: '流程分析', icon: Network },
   { id: 'evaluation' as const, label: 'AI 评测', icon: FlaskConical },
@@ -24,6 +26,8 @@ export default function Dashboard() {
   const [activeView, setActiveView] = useState<ViewId>('demo');
   const [evaluationSample, setEvaluationSample] = useState<EvaluationSample | null>(null);
   const [runtimeMode, setRuntimeMode] = useState<'mock' | 'llm'>('mock');
+  // 演示场景：事故中心「进入处置演示」按行跳转；切回 demo 视图时 GuidedIncidentDemo 用此初始值。
+  const [demoScenario, setDemoScenario] = useState<string>('gateway-timeout');
   const [llmRuntime] = useState(() => new LlmIncidentRuntime());
 
   const handleRunChange = useCallback((run: IncidentRun) => {
@@ -93,10 +97,16 @@ export default function Dashboard() {
         <div className={`content-wrap ${activeView === 'demo' ? 'demo-content-wrap' : ''}`}>
           {/* 处置演示保持挂载、仅按标签页隐藏：切换标签不再丢失 Mock/真实 LLM 的演示进度。 */}
           <div className={activeView === 'demo' ? '' : 'is-hidden'} hidden={activeView !== 'demo'}>
-            <GuidedIncidentDemo llmRuntime={llmRuntime} onRunChange={handleRunChange} />
+            <GuidedIncidentDemo llmRuntime={llmRuntime} onRunChange={handleRunChange} initialScenarioId={demoScenario} key={demoScenario} />
           </div>
           {activeView === 'incidents' ? (
-            <IncidentsView onStartDemo={() => setActiveView('demo')} />
+            <IncidentsView onStartDemo={(scenarioId) => { setDemoScenario(scenarioId); setActiveView('demo'); }} />
+          ) : activeView === 'overview' ? (
+            // 运营总览页：P4 引入，先挂占位，后续 PR 补 OverviewView 渲染。
+            <div className="overview-placeholder" aria-label="运营总览">
+              <h2>运营总览</h2>
+              <p>三层指标 + MTTR 分解 + 原始告警流 + 指标时序。P4 实现中。</p>
+            </div>
           ) : activeView === 'flow' ? (
             <FlowAnalyticsView />
           ) : activeView === 'evaluation' ? (
