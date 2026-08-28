@@ -39,7 +39,16 @@ export default function EChart({ option, summary, className = '', onSelect }: EC
       if (params.name) onSelect?.(params.name);
     };
     chart.on('click', handleClick);
-    const observer = new ResizeObserver(() => chart.resize());
+    const observer = new ResizeObserver(() => {
+      // ResizeObserver 回调里同步调 chart.resize() 会改 DOM 尺寸，可能再触发 resize 回调，
+      // 形成 loop 警告「ResizeObserver loop completed with undelivered notifications」。
+      // 用 rAF 把 resize 推到下一帧即可破环。
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => chart.resize());
+      } else {
+        chart.resize();
+      }
+    });
     observer.observe(containerRef.current);
     return () => {
       observer.disconnect();
